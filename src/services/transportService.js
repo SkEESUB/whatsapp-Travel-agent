@@ -25,7 +25,7 @@ function getGeminiModel() {
     throw new Error("Gemini AI not initialized. Check GEMINI_API_KEY in .env");
   }
   return ai.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
   });
 }
 

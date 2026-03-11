@@ -347,7 +347,7 @@ npm install @google/generative-ai
 2. **Verify `.env` has:**
 ```env
 GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.5-flash
 WHATSAPP_PHONE_NUMBER_ID=your_id
 WHATSAPP_ACCESS_TOKEN=your_token
 WHATSAPP_VERIFY_TOKEN=your_verify_token

@@ -18,7 +18,7 @@ function initializeGemini() {
 function getGeminiModel() {
   const ai = initializeGemini();
   if (!ai) throw new Error("Gemini AI not initialized");
-  return ai.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-1.5-flash" });
+  return ai.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
 }
 
 async function generateGeminiResponse(prompt) {

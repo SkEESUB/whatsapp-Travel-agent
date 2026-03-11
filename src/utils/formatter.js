@@ -140,25 +140,44 @@ class Formatter {
   static info(label, value, emoji = '') {
     return `${emoji} *${label}:* ${value}\n`;
   }
+
+  // ===== Travel Engine Formatters (Added for Transport / Hotel / Itinerary) =====
+
+  /**
+   * Format transport results from Gemini
+   * @param {string} response - Raw response from Gemini
+   * @returns {string} - Formatted or fallback message
+   */
+  static formatTransportOptions(response) {
+    if (!response || typeof response !== 'string' || response.trim() === '') {
+      return "⚠️ Travel information temporarily unavailable. Please try again later.";
+    }
+    return response;
+  }
+
+  /**
+   * Format hotel results from Gemini
+   * @param {string} response - Raw response from Gemini
+   * @returns {string} - Formatted or fallback message
+   */
+  static formatHotelOptions(response) {
+    if (!response || typeof response !== 'string' || response.trim() === '') {
+      return "⚠️ Hotel information temporarily unavailable.";
+    }
+    return response;
+  }
+
+  /**
+   * Format itinerary results from Gemini
+   * @param {string} response - Raw response from Gemini
+   * @returns {string} - Formatted or fallback message
+   */
+  static formatItinerary(response) {
+    if (!response || typeof response !== 'string' || response.trim() === '') {
+      return "⚠️ Itinerary generation failed.";
+    }
+    return response;
+  }
 }
-// ===== Travel Engine Formatters (Added for Transport / Hotel / Itinerary) =====
-
-// Format transport results from Gemini
-Formatter.formatTransportOptions = function(response) {
-  if (!response) return "⚠️ Travel information temporarily unavailable. Please try again later.";
-  return response;
-};
-
-// Format hotel results
-Formatter.formatHotelOptions = function(response) {
-  if (!response) return "⚠️ Hotel information temporarily unavailable.";
-  return response;
-};
-
-// Format itinerary results
-Formatter.formatItinerary = function(response) {
-  if (!response) return "⚠️ Itinerary generation failed.";
-  return response;
-};
 
 module.exports = Formatter;

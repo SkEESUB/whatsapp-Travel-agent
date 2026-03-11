@@ -146,10 +146,20 @@ class WebhookController {
       return;
     }
 
-    // Transport mode selection
+    // Transport mode selection - FIXED: Keep session active
     if (session.awaitingTransportMode) {
-      await this.handleTransportMode(from, lower, session, sendMessageFn);
+      await this.handleTransportMode(from, lower, text, session, sendMessageFn);
       return;
+    }
+
+    // NEW: Detect transport mode keywords anywhere in conversation
+    if (session.trip && session.origin && !session.awaitingTransportMode) {
+      // Check if user is trying to select a transport mode
+      const normalizedText = text.toLowerCase().trim();
+      if (normalizedText.includes('bus') || normalizedText.includes('train') || normalizedText.includes('flight')) {
+        await this.handleTransportMode(from, normalizedText, text, session, sendMessageFn);
+        return;
+      }
     }
 
     // Trip parsing
@@ -194,37 +204,66 @@ class WebhookController {
     await sendMessageFn(from, "🚍 Choose transport mode:\n\nBus\nTrain\nFlight");
   }
 
-  async handleTransportMode(from, mode, session, sendMessageFn) {
-    if (!["bus", "train", "flight"].includes(mode)) {
+  async handleTransportMode(from, modeInput, fullText, session, sendMessageFn) {
+    // Normalize input to lowercase for detection
+    const normalizedMode = fullText.toLowerCase().trim();
+      
+    // Detect transport mode from input
+    let selectedMode = null;
+    if (normalizedMode.includes('bus')) {
+      selectedMode = 'bus';
+    } else if (normalizedMode.includes('train')) {
+      selectedMode = 'train';
+    } else if (normalizedMode.includes('flight')) {
+      selectedMode = 'flight';
+    }
+      
+    // If no valid mode detected in awaitingTransportMode state, ask again
+    if (!selectedMode && session.awaitingTransportMode) {
       await sendMessageFn(from, "Please type: Bus / Train / Flight");
       return;
     }
-
+      
+    // If still no mode, use the original mode parameter
+    if (!selectedMode) {
+      selectedMode = modeInput;
+    }
+      
+    // Validate mode
+    if (!["bus", "train", "flight"].includes(selectedMode)) {
+      await sendMessageFn(from, "Please type: Bus / Train / Flight");
+      return;
+    }
+  
     const { destination, budgetBreakdown, people } = session.trip;
     const transportBudget = budgetBreakdown?.transport || Math.floor(session.trip.budget * 0.3);
+
+    console.log(`🚌 [Transport] Getting ${selectedMode} options: ${session.origin} → ${destination}`);
 
     // Use travel engine
     const result = await travelEngine.getTransport(
       this.capitalize(session.origin),
       destination,
-      this.capitalize(mode),
+      this.capitalize(selectedMode),
       transportBudget,
       people
     );
 
     if (result.success) {
       await sendMessageFn(from, result.data);
-      
+        
       // Show recommendation if available
-      if (result.recommended && result.recommended !== mode) {
+      if (result.recommended && result.recommended !== selectedMode) {
         await sendMessageFn(from, `💡 Tip: ${this.capitalize(result.recommended)} is recommended for this route.`);
       }
+        
+      // FIXED: Keep transport session active so user can switch modes
+      console.log("✅ [Transport] Results shown - keeping session active for mode switching");
     } else {
       await sendMessageFn(from, result.message || "⚠️ Unable to fetch transport data. Please try again.");
     }
-    
-    // CRITICAL: Clear transport session after response
-    sessionManager.clearTransportSession(session);
+      
+    // REMOVED: Don't clear session here - only clear when user explicitly exits or starts new trip
   }
 
   async handleHotels(from, session, sendMessageFn) {

@@ -141,5 +141,24 @@ class Formatter {
     return `${emoji} *${label}:* ${value}\n`;
   }
 }
+// ===== Travel Engine Formatters (Added for Transport / Hotel / Itinerary) =====
+
+// Format transport results from Gemini
+Formatter.formatTransportOptions = function(response) {
+  if (!response) return "⚠️ Travel information temporarily unavailable. Please try again later.";
+  return response;
+};
+
+// Format hotel results
+Formatter.formatHotelOptions = function(response) {
+  if (!response) return "⚠️ Hotel information temporarily unavailable.";
+  return response;
+};
+
+// Format itinerary results
+Formatter.formatItinerary = function(response) {
+  if (!response) return "⚠️ Itinerary generation failed.";
+  return response;
+};
 
 module.exports = Formatter;

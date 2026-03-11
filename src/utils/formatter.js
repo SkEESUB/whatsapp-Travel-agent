@@ -1,118 +1,145 @@
-// Formatter - WhatsApp-friendly output formatting
-// Enforces: max 4 options, clean spacing, no long paragraphs
+// Formatter Utility - Clean WhatsApp formatting helper functions
+// Ensures responses are readable on mobile devices
 
-const MAX_OPTIONS = 4;
-const MAX_LINE_LENGTH = 60;
-
-// Format transport options for WhatsApp
-function formatTransportOptions(mode, origin, destination, budget, people, options) {
-  let output = `🚌 *${mode} Options*\n`;
-  output += `${origin} → ${destination}\n\n`;
-  output += `💰 Budget: ₹${budget} (${people} people)\n\n`;
-
-  options.slice(0, MAX_OPTIONS).forEach((opt, idx) => {
-    output += `${idx + 1}️⃣ ${opt.operator || opt.name}\n`;
-    if (opt.depart) output += `Depart: ${opt.depart}\n`;
-    if (opt.arrive) output += `Arrive: ${opt.arrive}\n`;
-    if (opt.duration) output += `Duration: ${opt.duration}\n`;
-    if (opt.price) output += `Price: ₹${opt.price}\n`;
-    if (opt.type) output += `Type: ${opt.type}\n`;
-    if (opt.classes) output += `Classes: ${opt.classes}\n`;
-    output += '\n';
-  });
-
-  return output.trim();
-}
-
-// Format hotel recommendations
-function formatHotels(destination, budget, nights, hotels) {
-  let output = `🏨 *Hotels in ${destination}*\n\n`;
-  output += `💰 Budget: ₹${budget}\n`;
-  output += `📅 ${nights} night(s)\n\n`;
-
-  if (hotels.budget?.length) {
-    output += `*Budget Hotels*\n`;
-    hotels.budget.slice(0, 2).forEach(h => {
-      output += `• ${h.name} – ₹${h.price} – ${h.area}\n`;
-    });
-    output += '\n';
+class Formatter {
+  /**
+   * Format text for WhatsApp (bold, italic, monospace)
+   * @param {string} text - Text to format
+   * @param {string} style - bold, italic, monospace, strikethrough
+   * @returns {string} - Formatted text
+   */
+  static format(text, style = 'normal') {
+    if (!text) return '';
+    
+    switch (style) {
+      case 'bold':
+        return `*${text}*`;
+      case 'italic':
+        return `_${text}_`;
+      case 'monospace':
+        return `\`\`\`${text}\`\`\``;
+      case 'strikethrough':
+        return `~${text}~`;
+      default:
+        return text;
+    }
   }
 
-  if (hotels.midRange?.length) {
-    output += `*Mid-Range*\n`;
-    hotels.midRange.slice(0, 2).forEach(h => {
-      output += `• ${h.name} – ₹${h.price} – ${h.area}\n`;
-    });
-    output += '\n';
+  /**
+   * Create header for sections
+   * @param {string} title - Section title
+   * @param {string} emoji - Emoji prefix
+   * @returns {string} - Formatted header
+   */
+  static header(title, emoji = '') {
+    return `${emoji} *${title.toUpperCase()}*\n\n`;
   }
 
-  if (hotels.premium?.length) {
-    output += `*Premium*\n`;
-    hotels.premium.slice(0, 1).forEach(h => {
-      output += `• ${h.name} – ₹${h.price} – ${h.area}\n`;
-    });
+  /**
+   * Create separator line
+   * @param {number} length - Length of separator
+   * @returns {string} - Separator string
+   */
+  static separator(length = 40) {
+    return '─'.repeat(length);
   }
 
-  return output.trim();
+  /**
+   * Format table row for WhatsApp
+   * @param {array} columns - Array of column values
+   * @param {number} maxWidth - Maximum width per column
+   * @returns {string} - Formatted row
+   */
+  static tableRow(columns, maxWidth = 15) {
+    return columns.map(col => {
+      const str = String(col);
+      return str.length > maxWidth ? str.substring(0, maxWidth) + '...' : str.padEnd(maxWidth);
+    }).join(' | ');
+  }
+
+  /**
+   * Add bullet point to line
+   * @param {string} text - Text content
+   * @param {string} symbol - Bullet symbol
+   * @returns {string} - Bulleted text
+   */
+  static bullet(text, symbol = '•') {
+    return `${symbol} ${text}\n`;
+  }
+
+  /**
+   * Add number to line
+   * @param {number} num - Number
+   * @param {string} text - Text content
+   * @returns {string} - Numbered text
+   */
+  static numbered(num, text) {
+    return `${num}. ${text}\n`;
+  }
+
+  /**
+   * Format price in INR
+   * @param {number} amount - Amount in rupees
+   * @returns {string} - Formatted price
+   */
+  static price(amount) {
+    return `₹${amount.toLocaleString('en-IN')}`;
+  }
+
+  /**
+   * Format time duration
+   * @param {number} hours - Hours
+   * @param {number} minutes - Minutes
+   * @returns {string} - Formatted duration
+   */
+  static duration(hours, minutes = 0) {
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    return parts.join(' ') || '0m';
+  }
+
+  /**
+   * Truncate long text for mobile
+   * @param {string} text - Text to truncate
+   * @param {number} maxLength - Maximum length
+   * @returns {string} - Truncated text
+   */
+  static truncate(text, maxLength = 100) {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  }
+
+  /**
+   * Add spacing between sections
+   * @param {number} lines - Number of blank lines
+   * @returns {string} - Spacing string
+   */
+  static spacing(lines = 1) {
+    return '\n'.repeat(lines);
+  }
+
+  /**
+   * Format rating with stars
+   * @param {number} rating - Rating out of 5
+   * @returns {string} - Star rating
+   */
+  static rating(rating) {
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    return '⭐'.repeat(fullStars) + (hasHalfStar ? '½' : '');
+  }
+
+  /**
+   * Create info line with label and value
+   * @param {string} label - Label text
+   * @param {string} value - Value text
+   * @param {string} emoji - Optional emoji
+   * @returns {string} - Formatted info line
+   */
+  static info(label, value, emoji = '') {
+    return `${emoji} *${label}:* ${value}\n`;
+  }
 }
 
-// Format tourist places
-function formatTouristPlaces(destination, places) {
-  let output = `🎯 *Top Places in ${destination}*\n\n`;
-  output += `*Must Visit*\n\n`;
-
-  places.slice(0, 6).forEach((place, idx) => {
-    output += `${idx + 1}️⃣ ${place.name}\n`;
-    if (place.description) output += `${place.description}\n`;
-    if (place.bestTime) output += `Best: ${place.bestTime}\n`;
-    output += '\n';
-  });
-
-  return output.trim();
-}
-
-// Format itinerary
-function formatItinerary(destination, days, dailyPlan) {
-  let output = `📅 *${days}-Day Itinerary: ${destination}*\n\n`;
-
-  dailyPlan.slice(0, days).forEach((day, idx) => {
-    output += `*Day ${idx + 1}*\n`;
-    if (day.morning) output += `🌅 Morning: ${day.morning}\n`;
-    if (day.afternoon) output += `🍽️ Afternoon: ${day.afternoon}\n`;
-    if (day.evening) output += `🌆 Evening: ${day.evening}\n`;
-    output += '\n';
-  });
-
-  return output.trim();
-}
-
-// Format budget breakdown
-function formatBudget(destination, totalBudget, people, days, breakdown) {
-  let output = `💰 *Budget Plan: ${destination}*\n\n`;
-  output += `Total: ₹${totalBudget} (${people} people, ${days} days)\n\n`;
-  output += `*Breakdown*\n\n`;
-
-  if (breakdown.transport) output += `🚍 Transport: ₹${breakdown.transport}\n`;
-  if (breakdown.hotel) output += `🏨 Hotel: ₹${breakdown.hotel}\n`;
-  if (breakdown.food) output += `🍽️ Food: ₹${breakdown.food}\n`;
-  if (breakdown.localTravel) output += `🛺 Local Travel: ₹${breakdown.localTravel}\n`;
-  if (breakdown.emergencyBuffer) output += `🚨 Emergency: ₹${breakdown.emergencyBuffer}\n`;
-
-  return output.trim();
-}
-
-// Truncate long text
-function truncate(text, maxLength = 500) {
-  if (!text || text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
-
-module.exports = {
-  formatTransportOptions,
-  formatHotels,
-  formatTouristPlaces,
-  formatItinerary,
-  formatBudget,
-  truncate,
-  MAX_OPTIONS,
-};
+module.exports = Formatter;

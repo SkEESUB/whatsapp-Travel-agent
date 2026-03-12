@@ -2,59 +2,44 @@
 // Provides both train and bus options with detailed formatting
 
 const geminiService = require('../services/geminiService');
-const formatter = require('../utils/formatter');
 
 class TransportEngine {
-  /**
-   * Get comprehensive transport options between two cities
-   * @param {string} origin - Origin city
-   * @param {string} destination - Destination city
-   * @returns {Promise<string>} - Formatted transport options
-   */
+
   async getTransportOptions(origin, destination) {
     try {
       console.log(`🚆 [Transport] Getting options: ${origin} → ${destination}`);
 
-      // Get both train and bus options with individual error handling
       const [trainResponse, busResponse] = await Promise.all([
-        this.getTrainOptions(origin, destination).catch(err => {
-          console.error('❌ [Transport] Train error:', err.message);
-          return this.getDefaultTrainResponse();
-        }),
-        this.getBusOptions(origin, destination).catch(err => {
-          console.error('❌ [Transport] Bus error:', err.message);
-          return this.getDefaultBusResponse();
-        }),
+        this.getTrainOptions(origin, destination),
+        this.getBusOptions(origin, destination)
       ]);
 
-      // Combine responses
       let combinedResponse = `🚆 *TRAIN OPTIONS*\n${origin} → ${destination}\n\n`;
       combinedResponse += trainResponse;
-      combinedResponse += '\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n';
+
+      combinedResponse += `\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
       combinedResponse += `🚌 *BUS OPTIONS*\n${origin} → ${destination}\n\n`;
       combinedResponse += busResponse;
 
-      // Add travel tips
-      combinedResponse += '\n\n💡 *Travel Tips*:\n';
-      combinedResponse += '• Book trains in advance for better prices\n';
-      combinedResponse += '• Buses may take longer but are more flexible\n';
-      combinedResponse += '• Check cancellation policies before booking';
+      combinedResponse += `\n\n💡 *Travel Tips*\n`;
+      combinedResponse += `• Book trains early for better prices\n`;
+      combinedResponse += `• Buses are flexible with boarding points\n`;
+      combinedResponse += `• Compare duration before choosing\n`;
 
       return combinedResponse;
 
     } catch (error) {
-      console.error('❌ [Transport] Error:', error.message);
-      return '⚠️ Transport information temporarily unavailable. Please try again later.';
+      console.error('❌ [Transport] Engine error:', error.message);
+      return '⚠️ Transport information temporarily unavailable. Please try again.';
     }
   }
 
-  /**
-   * Get train options using Gemini
-   */
   async getTrainOptions(origin, destination) {
-    const prompt = `Generate realistic Indian Railways train options from ${origin} to ${destination}.
 
-Provide EXACTLY 5 trains with this format:
+    const prompt = `Generate 5 realistic Indian Railways trains from ${origin} to ${destination}.
+
+Format exactly like this table:
 
 Train Name | Train No | Departure | Arrival | Duration | Frequency
 -----------------------------------------------------------
@@ -65,37 +50,40 @@ Sabari SF | 20630 | 06:00 | 11:02 | 5h02m | Daily
 Narayanadri SF | 12733 | 00:30 | 05:35 | 5h05m | Daily
 
 Estimated Ticket Prices:
-General: ₹XXX
-Sleeper: ₹XXX
-3AC: ₹XXX
-2AC: ₹XXX
+General: ₹150
+Sleeper: ₹350
+3AC: ₹800
+2AC: ₹1200
 
-Rules:
-- Realistic train names and numbers
-- Proper departure/arrival times
-- Accurate duration calculations
-- Realistic pricing
-- No explanations or paragraphs
-- Clean table format only
-
-Return ONLY the formatted list.`;
+Return ONLY the table.`;
 
     try {
+
       const response = await geminiService.generateAIResponse(prompt);
-      return response || this.getDefaultTrainResponse();
+
+      const text =
+        response?.text ||
+        response?.response ||
+        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        response;
+
+      if (!text || text.length < 20) {
+        return this.getDefaultTrainResponse();
+      }
+
+      return text;
+
     } catch (error) {
-      console.error('❌ [Transport] Train API error:', error.message);
+      console.error('❌ [Transport] Train error:', error.message);
       return this.getDefaultTrainResponse();
     }
   }
 
-  /**
-   * Get bus options using Gemini
-   */
   async getBusOptions(origin, destination) {
-    const prompt = `Generate realistic bus options from ${origin} to ${destination} in India.
 
-Provide EXACTLY 5 buses with this format:
+    const prompt = `Generate 5 realistic bus services from ${origin} to ${destination} in India.
+
+Format exactly like this table:
 
 Operator | Bus Type | Departure | Arrival | Duration | Price
 -----------------------------------------------------------
@@ -105,21 +93,26 @@ IntrCity | AC Sleeper | 23:00 | 05:30 | 6h30m | ₹850
 ZingBus | AC Seater | 22:15 | 04:45 | 6h30m | ₹600
 Morning Star | AC Sleeper | 23:30 | 06:00 | 6h30m | ₹900
 
-Rules:
-- Mix of government and private operators
-- Realistic bus types (AC Sleeper, AC Seater, Super Luxury, etc.)
-- Proper departure/arrival times
-- Realistic pricing
-- No explanations or paragraphs
-- Clean table format only
-
-Return ONLY the formatted list.`;
+Return ONLY the table.`;
 
     try {
+
       const response = await geminiService.generateAIResponse(prompt);
-      return response || this.getDefaultBusResponse();
+
+      const text =
+        response?.text ||
+        response?.response ||
+        response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        response;
+
+      if (!text || text.length < 20) {
+        return this.getDefaultBusResponse();
+      }
+
+      return text;
+
     } catch (error) {
-      console.error('❌ [Transport] Bus API error:', error.message);
+      console.error('❌ [Transport] Bus error:', error.message);
       return this.getDefaultBusResponse();
     }
   }

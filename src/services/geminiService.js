@@ -1,8 +1,16 @@
 const axios = require("axios");
 
+// Input sanitization utility
+function sanitizeInput(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/[;<>"']/g, '')  // Remove dangerous chars
+    .substring(0, 100);       // Limit length
+}
+
 
 // Gemini API call
-async function generateGeminiResponse(prompt) {
+async function generateAIResponse(prompt) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -22,8 +30,12 @@ async function generateGeminiResponse(prompt) {
     const text =
       response.data.candidates?.[0]?.content?.parts?.[0]?.text || null;
 
-    console.log("✅ Gemini response generated");
+    if (!text) {
+      console.warn("⚠️ [Gemini] Returned empty response");
+      return "⚠️ Travel information temporarily unavailable. Please try again later.";
+    }
 
+    console.log("✅ [Gemini] Response generated successfully");
     return text;
 
   } catch (error) {
@@ -228,6 +240,7 @@ ${response}`;
 }
 
 module.exports = {
+  generateAIResponse,
   getTransportOptions,
   getHotelRecommendations,
   getTouristPlaces,

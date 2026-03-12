@@ -15,10 +15,16 @@ class TransportEngine {
     try {
       console.log(`🚆 [Transport] Getting options: ${origin} → ${destination}`);
 
-      // Get both train and bus options
+      // Get both train and bus options with individual error handling
       const [trainResponse, busResponse] = await Promise.all([
-        this.getTrainOptions(origin, destination),
-        this.getBusOptions(origin, destination),
+        this.getTrainOptions(origin, destination).catch(err => {
+          console.error('❌ [Transport] Train error:', err.message);
+          return this.getDefaultTrainResponse();
+        }),
+        this.getBusOptions(origin, destination).catch(err => {
+          console.error('❌ [Transport] Bus error:', err.message);
+          return this.getDefaultBusResponse();
+        }),
       ]);
 
       // Combine responses

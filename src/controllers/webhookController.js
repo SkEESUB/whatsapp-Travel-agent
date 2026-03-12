@@ -205,6 +205,12 @@ class WebhookController {
   }
 
   async handleTransportMode(from, modeInput, fullText, session, sendMessageFn) {
+    // Validate session.trip exists
+    if (!session.trip) {
+      await sendMessageFn(from, "❌ Please send trip details first.\n\nExample: Delhi 3 days 10000 2 people");
+      return;
+    }
+    
     // Normalize input to lowercase for detection
     const normalizedMode = fullText.toLowerCase().trim();
       

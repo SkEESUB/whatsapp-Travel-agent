@@ -1,5 +1,6 @@
 // Webhook Controller - Handle all WhatsApp message logic
 const sessionManager = require("../utils/sessionManager");
+const transportEngine = require("../engines/transportEngine");
 const travelEngine = require("../engine/travelEngine");
 
 class WebhookController {
@@ -242,9 +243,27 @@ class WebhookController {
     }
   
     const { destination, budgetBreakdown, people } = session.trip;
-    const transportBudget = budgetBreakdown?.transport || Math.floor(session.trip.budget * 0.3);
+    // CALL TRANSPORT ENGINE
 
-    console.log(`🚌 [Transport] Getting ${selectedMode} options: ${session.origin} → ${destination}`);
+const origin = session.origin;
+const destinationCity = destination;
+
+console.log(`[Transport] Getting ${selectedMode} options: ${origin} → ${destinationCity}`);
+
+const transportResult = await transportEngine.getTransportOptions(
+  origin,
+  destinationCity
+);
+
+// Send result to WhatsApp
+await sendMessageFn(from, transportResult);
+
+// keep session active so user can switch bus/train
+session.awaitingTransportMode = true;
+
+console.log("[Transport] Results shown - keeping session active for mode switching");
+
+return;
 
     // Use travel engine
     const result = await travelEngine.getTransport(

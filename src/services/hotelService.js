@@ -97,5 +97,6 @@ function parseHotelResponse(text) {
   
   return hotels;
 }
+}
 
 module.exports = { getHotels };

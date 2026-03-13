@@ -37,25 +37,41 @@ class TransportEngine {
 
   async getTrainOptions(origin, destination) {
 
-    const prompt = `Generate 5 realistic Indian Railways trains from ${origin} to ${destination}.
+    const prompt = `Generate realistic Indian Railways trains from ${origin} to ${destination}.
 
-Format exactly like this table:
+Return exactly 5 trains in this WhatsApp friendly format:
 
-Train Name | Train No | Departure | Arrival | Duration | Frequency
------------------------------------------------------------
-Vande Bharat | 20702 | 19:45 | 23:42 | 3h57m | Daily
-Palnadu SF | 12747 | 05:45 | 10:15 | 4h30m | Daily
-LPI Intercity | 12795 | 18:17 | 22:10 | 3h53m | Daily
-Sabari SF | 20630 | 06:00 | 11:02 | 5h02m | Daily
-Narayanadri SF | 12733 | 00:30 | 05:35 | 5h05m | Daily
+🚆 TRAIN OPTIONS
+${origin} → ${destination}
 
-Estimated Ticket Prices:
+1️⃣ Train Name: Vande Bharat Express
+🚉 Train No: 20702
+⏰ Departure: 19:45
+🏁 Arrival: 23:42
+⌛ Duration: 3h 57m
+📅 Frequency: Daily
+
+2️⃣ Train Name: Palnadu SF Express
+🚉 Train No: 12747
+⏰ Departure: 05:45
+🏁 Arrival: 10:15
+⌛ Duration: 4h 30m
+📅 Frequency: Daily
+
+After trains add ticket prices:
+
+💰 Estimated Ticket Prices
 General: ₹150
 Sleeper: ₹350
-3AC: ₹800
-2AC: ₹1200
+3AC: ₹900
+2AC: ₹1400
 
-Return ONLY the table.`;
+Rules:
+- Do NOT use tables
+- Do NOT use | symbols
+- Use emoji format exactly like above
+- WhatsApp readable format only
+`;
 
     try {
 
@@ -81,19 +97,33 @@ Return ONLY the table.`;
 
   async getBusOptions(origin, destination) {
 
-    const prompt = `Generate 5 realistic bus services from ${origin} to ${destination} in India.
+    const prompt = `Generate realistic bus options from ${origin} to ${destination} in India.
 
-Format exactly like this table:
+Return exactly 8 buses in this WhatsApp friendly format:
 
-Operator | Bus Type | Departure | Arrival | Duration | Price
------------------------------------------------------------
-APSRTC | Super Luxury | 22:00 | 04:30 | 6h30m | ₹650
-TGSRTC | Indra AC | 21:30 | 04:00 | 6h30m | ₹700
-IntrCity | AC Sleeper | 23:00 | 05:30 | 6h30m | ₹850
-ZingBus | AC Seater | 22:15 | 04:45 | 6h30m | ₹600
-Morning Star | AC Sleeper | 23:30 | 06:00 | 6h30m | ₹900
+🚌 BUS OPTIONS
+${origin} → ${destination}
 
-Return ONLY the table.`;
+1️⃣ Operator: IntrCity SmartBus
+🛏 Bus Type: AC Sleeper
+⏰ Departure: 19:00
+🏁 Arrival: 05:00
+⌛ Duration: 10h
+💰 Price: ₹3200
+
+2️⃣ Operator: ZingBus
+🛏 Bus Type: AC Sleeper
+⏰ Departure: 20:30
+🏁 Arrival: 06:00
+⌛ Duration: 9h 30m
+💰 Price: ₹3500
+
+Rules:
+- Do NOT use tables
+- No | symbols
+- WhatsApp readable layout
+- Only 8 buses
+`;
 
     try {
 
@@ -118,30 +148,49 @@ Return ONLY the table.`;
   }
 
   getDefaultTrainResponse() {
-    return `Train Name | Train No | Departure | Arrival | Duration | Frequency
------------------------------------------------------------
-Express Special | 12345 | 06:00 | 12:00 | 6h00m | Daily
-Passenger | 56789 | 08:30 | 15:30 | 7h00m | Daily
-Superfast | 20123 | 14:00 | 19:30 | 5h30m | Daily
-Intercity | 12789 | 17:45 | 23:15 | 5h30m | Daily
-Mail Express | 10456 | 21:00 | 04:00 | 7h00m | Daily
+return `🚆 *TRAIN OPTIONS*
 
-Estimated Ticket Prices:
-General: ₹150
-Sleeper: ₹350
-3AC: ₹800
+1️⃣ Vande Bharat Express
+🚆 Train No: 20702
+🕒 Departure: 19:45
+🕒 Arrival: 23:42
+⏱ Duration: 3h57m
+📅 Frequency: Daily
+
+2️⃣ Palnadu SF Express
+🚆 Train No: 12747
+🕒 Departure: 05:45
+🕒 Arrival: 10:15
+⏱ Duration: 4h30m
+📅 Frequency: Daily
+
+💰 *Estimated Ticket Prices*
+
+General: ₹150  
+Sleeper: ₹350  
+3AC: ₹800  
 2AC: ₹1200`;
-  }
-
-  getDefaultBusResponse() {
-    return `Operator | Bus Type | Departure | Arrival | Duration | Price
------------------------------------------------------------
-State RTC | Deluxe | 21:00 | 04:00 | 7h00m | ₹550
-Private Operator | AC Seater | 22:00 | 05:00 | 7h00m | ₹650
-IntrCity | AC Sleeper | 23:00 | 06:00 | 7h00m | ₹800
-Orange Travels | AC Sleeper | 22:30 | 05:30 | 7h00m | ₹750
-ZingBus | Semi Deluxe | 20:00 | 03:30 | 7h30m | ₹500`;
-  }
 }
 
+  getDefaultBusResponse() {
+return `🚌 *BUS OPTIONS*
+
+1️⃣ APSRTC Super Luxury
+🕒 Departure: 22:00
+🕒 Arrival: 04:30
+⏱ Duration: 6h30m
+💰 Price: ₹650
+
+2️⃣ IntrCity AC Sleeper
+🕒 Departure: 23:00
+🕒 Arrival: 05:30
+⏱ Duration: 6h30m
+💰 Price: ₹850
+
+3️⃣ ZingBus AC Seater
+🕒 Departure: 22:15
+🕒 Arrival: 04:45
+⏱ Duration: 6h30m
+💰 Price: ₹600`;
+}
 module.exports = new TransportEngine();

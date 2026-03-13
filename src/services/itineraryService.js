@@ -52,15 +52,10 @@ Return ONLY the list.`;
 
   const response = await generateGeminiResponse(prompt);
   
-  if (!response) {
-    return formatter.formatItinerary(destination, days, 
-      Array(days).fill({ morning: 'Local exploration', afternoon: 'Try local cuisine', evening: 'Sightseeing' })
-    );
-  }
-
-  const dailyPlan = parseItineraryResponse(response, days);
-  return formatter.formatItinerary(destination, days, dailyPlan);
+if (!response) {
+  return "⚠️ Itinerary generation failed. Please try again later.";
 }
+return response;
 
 function parseItineraryResponse(text, days) {
   const lines = text.split('\n').filter(l => l.trim());

@@ -58,18 +58,10 @@ Rules:
 Return ONLY the list.`;
 
   const response = await generateGeminiResponse(prompt);
-  
   if (!response) {
-    return formatter.formatHotels(destination, hotelBudget, totalNights, {
-      budget: [{ name: 'Budget Hotel', price: perNight, area: 'City Center' }],
-      midRange: [{ name: 'Mid-Range Hotel', price: perNight * 1.5, area: 'Main Area' }],
-      premium: []
-    });
-  }
-
-  const hotels = parseHotelResponse(response);
-  return formatter.formatHotels(destination, hotelBudget, totalNights, hotels);
+  return "⚠️ Hotel information temporarily unavailable. Please try again later.";
 }
+return response;
 
 function parseHotelResponse(text) {
   const lines = text.split('\n').filter(l => l.trim());

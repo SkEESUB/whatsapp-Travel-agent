@@ -191,6 +191,6 @@ return `🚌 *BUS OPTIONS*
 🕒 Departure: 22:15
 🕒 Arrival: 04:45
 ⏱ Duration: 6h30m
-💰 Price: ₹600`;
+💰 Price: ₹600;
 }
 module.exports = new TransportEngine();

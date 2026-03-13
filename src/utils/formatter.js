@@ -160,24 +160,80 @@ class Formatter {
    * @param {string} response - Raw response from Gemini
    * @returns {string} - Formatted or fallback message
    */
-  static formatHotelOptions(response) {
-    if (!response || typeof response !== 'string' || response.trim() === '') {
-      return "⚠️ Hotel information temporarily unavailable.";
-    }
-    return response;
+static formatHotelOptions(response) {
+
+  if (!response || typeof response !== "string" || response.trim() === "") {
+    return "⚠️ Hotel information temporarily unavailable.";
   }
+
+  const lines = response.split("\n").filter(l => l.trim());
+
+  let formatted = "🏨 HOTEL OPTIONS\n\n";
+
+  lines.slice(0,5).forEach((line, i) => {
+    const parts = line.split("–").map(p => p.trim());
+
+    if (parts.length >= 3) {
+      formatted += `🏨 ${i + 1}. ${parts[0]}\n`;
+      formatted += `💰 Price: ${parts[1]}\n`;
+      formatted += `📍 Location: ${parts[2]}\n`;
+      formatted += `──────────────\n`;
+    }
+  });
+
+  formatted += "\n💡 Booking Tips\n";
+  formatted += "• Choose hotels near city center\n";
+  formatted += "• Compare ratings before booking\n";
+
+  return formatted;
+}
 
   /**
    * Format itinerary results from Gemini
    * @param {string} response - Raw response from Gemini
    * @returns {string} - Formatted or fallback message
    */
-  static formatItinerary(response) {
-    if (!response || typeof response !== 'string' || response.trim() === '') {
-      return "⚠️ Itinerary generation failed.";
-    }
-    return response;
+static formatItinerary(response) {
+
+  if (!response || typeof response !== "string" || response.trim() === "") {
+    return "⚠️ Itinerary generation failed.";
   }
+
+  const days = response.split("Day").filter(d => d.trim());
+
+  let formatted = "🗺 TRAVEL ITINERARY\n\n";
+
+  days.slice(0,5).forEach((day, i) => {
+
+    const parts = day.trim().split("\n").filter(l => l.trim());
+
+    formatted += `📅 Day ${i+1}\n`;
+
+    parts.forEach(line => {
+
+      if (line.toLowerCase().includes("morning"))
+        formatted += `🌅 ${line}\n`;
+
+      else if (line.toLowerCase().includes("afternoon"))
+        formatted += `🍽 ${line}\n`;
+
+      else if (line.toLowerCase().includes("evening"))
+        formatted += `🌆 ${line}\n`;
+
+      else
+        formatted += `${line}\n`;
+
+    });
+
+    formatted += `──────────────\n`;
+  });
+
+  formatted += "\n💡 Travel Tips\n";
+  formatted += "• Start early to avoid crowds\n";
+  formatted += "• Use local transport for faster travel\n";
+
+  return formatted;
+}
 }
 
 module.exports = Formatter;

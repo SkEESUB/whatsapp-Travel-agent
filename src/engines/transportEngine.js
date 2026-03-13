@@ -173,24 +173,26 @@ Sleeper: ₹350
 }
 
   getDefaultBusResponse() {
-return `🚌 *BUS OPTIONS*
+  return `🚌 BUS OPTIONS
 
 1️⃣ APSRTC Super Luxury
-🕒 Departure: 22:00
-🕒 Arrival: 04:30
-⏱ Duration: 6h30m
-💰 Price: ₹650
+Departure: 22:00
+Arrival: 04:30
+Duration: 6h30m
+Price: ₹650
 
 2️⃣ IntrCity AC Sleeper
-🕒 Departure: 23:00
-🕒 Arrival: 05:30
-⏱ Duration: 6h30m
-💰 Price: ₹850
+Departure: 23:00
+Arrival: 05:30
+Duration: 6h30m
+Price: ₹850
 
 3️⃣ ZingBus AC Seater
-🕒 Departure: 22:15
-🕒 Arrival: 04:45
-⏱ Duration: 6h30m
-💰 Price: ₹600;
+Departure: 22:15
+Arrival: 04:45
+Duration: 6h30m
+Price: ₹600
+`;
+}
 }
 module.exports = new TransportEngine();

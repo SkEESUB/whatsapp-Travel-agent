@@ -84,5 +84,6 @@ function parseItineraryResponse(text, days) {
   
   return plan.slice(0, days);
 }
+}
 
 module.exports = { getItinerary };

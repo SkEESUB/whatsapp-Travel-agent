@@ -154,6 +154,12 @@ async routeMessage(from, lower, text, session, sendMessageFn) {
       return;
     }
 
+  // Food Guide
+if (lower === "food" || lower === "6") {
+  await this.handleFood(from, session, sendMessageFn);
+  return;
+}
+
     // Origin input - WITH VALIDATION
     if (session.awaitingOrigin) {
       await this.handleOriginInput(from, text, session, sendMessageFn);
@@ -344,6 +350,33 @@ async handleHotels(from, session, sendMessageFn) {
     }
   }
 
+  // 🍽 FOOD HANDLER (ADD HERE)
+async handleFood(from, session, sendMessageFn) {
+
+  if (!session.trip) {
+    await sendMessageFn(from, "❌ Please send trip details first.");
+    return;
+  }
+
+  const { destination } = session.trip;
+
+  await sendMessageFn(from, "🍽 Finding best food in the city... ⏳");
+
+  const result = await travelEngine.getFood(destination);
+
+  if (result.success) {
+    await sendMessageFn(from, result.data);
+  } else {
+    await sendMessageFn(from, result.message);
+  }
+}
+
+async handleItinerary(from, session, sendMessageFn) {
+  if (!session.trip) {
+    await sendMessageFn(from, "❌ Please send trip details first.");
+    return;
+  }
+
 async handleItinerary(from, session, sendMessageFn) {
   if (!session.trip) {
     await sendMessageFn(from, "❌ Please send trip details first.");
@@ -401,6 +434,7 @@ Choose what you want:
 🏨 3 Hotels
 🗺 4 Itinerary
 💰 5 Budget
+🍽 6 Food
 
 🔄 Type *new trip* anytime to start again.`
 );

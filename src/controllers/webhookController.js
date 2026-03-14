@@ -250,6 +250,9 @@ const destinationCity = destination;
 
 console.log(`[Transport] Getting ${selectedMode} options: ${origin} → ${destinationCity}`);
 
+// LOADING MESSAGE
+await sendMessageFn(from, "🔎 Searching transport options... Please wait ⏳");
+
 const transportResult = await transportEngine.getTransportOptions(
   origin,
   destinationCity
@@ -291,23 +294,26 @@ return;
     // REMOVED: Don't clear session here - only clear when user explicitly exits or starts new trip
   }
 
-  async handleHotels(from, session, sendMessageFn) {
-    if (!session.trip) {
-      await sendMessageFn(from, "❌ Please send trip details first.");
-      return;
-    }
-
-    const { destination, days, budgetBreakdown } = session.trip;
-    const hotelBudget = budgetBreakdown?.hotel || Math.floor(session.trip.budget * 0.4);
-
-    const result = await travelEngine.getHotels(destination, hotelBudget, days);
-
-    if (result.success) {
-      await sendMessageFn(from, result.data);
-    } else {
-      await sendMessageFn(from, result.message);
-    }
+async handleHotels(from, session, sendMessageFn) {
+  if (!session.trip) {
+    await sendMessageFn(from, "❌ Please send trip details first.");
+    return;
   }
+
+  const { destination, days, budgetBreakdown } = session.trip;
+  const hotelBudget = budgetBreakdown?.hotel || Math.floor(session.trip.budget * 0.4);
+
+  // HOTEL LOADING MESSAGE
+  await sendMessageFn(from, "🏨 Searching best hotels... Please wait ⏳");
+
+  const result = await travelEngine.getHotels(destination, hotelBudget, days);
+
+  if (result.success) {
+    await sendMessageFn(from, result.data);
+  } else {
+    await sendMessageFn(from, result.message);
+  }
+}
 
   async handlePlaces(from, session, sendMessageFn) {
     if (!session.trip) {
@@ -325,21 +331,25 @@ return;
     }
   }
 
-  async handleItinerary(from, session, sendMessageFn) {
-    if (!session.trip) {
-      await sendMessageFn(from, "❌ Please send trip details first.");
-      return;
-    }
-
-    const { destination, days, budget, people } = session.trip;
-    const result = await travelEngine.getItinerary(destination, days, people, budget);
-
-    if (result.success) {
-      await sendMessageFn(from, result.data);
-    } else {
-      await sendMessageFn(from, result.message);
-    }
+async handleItinerary(from, session, sendMessageFn) {
+  if (!session.trip) {
+    await sendMessageFn(from, "❌ Please send trip details first.");
+    return;
   }
+
+  const { destination, days, budget, people } = session.trip;
+
+  // ITINERARY LOADING MESSAGE
+  await sendMessageFn(from, "🗺 Creating your travel itinerary... Please wait ⏳");
+
+  const result = await travelEngine.getItinerary(destination, days, people, budget);
+
+  if (result.success) {
+    await sendMessageFn(from, result.data);
+  } else {
+    await sendMessageFn(from, result.message);
+  }
+}
 
   async handleBudget(from, session, sendMessageFn) {
     if (!session.trip) {

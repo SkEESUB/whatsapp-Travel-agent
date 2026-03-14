@@ -4,6 +4,7 @@ const hotelService = require("../services/hotelService");
 const itineraryService = require("../services/itineraryService");
 const budgetService = require("../services/budgetService");
 const distanceRules = require("../utils/distanceRules");
+const foodService = require("../services/foodService");
 
 class TravelEngine {
   // Get transport options based on mode
@@ -203,6 +204,35 @@ return { success: true, data: formatted };
       };
     }
   }
+
+  async getFood(destination) {
+  try {
+
+    console.log(`🍽 Getting food guide for ${destination}`);
+
+    const result = await foodService.getFoodGuide(destination);
+
+    if (!result) {
+      return {
+        success: false,
+        message: "⚠️ Food guide unavailable right now."
+      };
+    }
+
+    const formatted = `🍽 *FOOD GUIDE — ${destination.toUpperCase()}*\n\n${result}`;
+
+    return { success: true, data: formatted };
+
+  } catch (err) {
+
+    console.error("❌ Travel Engine error:", err.message);
+
+    return {
+      success: false,
+      message: "⚠️ Food guide unavailable."
+    };
+  }
+}
 }
 
 module.exports = new TravelEngine();

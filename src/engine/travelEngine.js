@@ -59,28 +59,44 @@ class TravelEngine {
   }
 
   // Get hotel recommendations
-  async getHotels(destination, budget, days) {
-    try {
-      console.log(`🏨 Getting hotels in ${destination}`);
-      const result = await hotelService.getHotels(destination, budget, days);
-      
-      if (!result) {
-        return {
-          success: false,
-          message: "⚠️ Hotel information temporarily unavailable. Please try again later."
-        };
-      }
-      
-      return { success: true, data: result };
-      
-    } catch (err) {
-      console.error("❌ Travel Engine error:", err.message);
+async getHotels(destination, budget, days) {
+  try {
+    console.log(`🏨 Getting hotels in ${destination}`);
+
+    const result = await hotelService.getHotels(destination, budget, days);
+
+    if (!result) {
       return {
         success: false,
         message: "⚠️ Hotel information temporarily unavailable. Please try again later."
       };
     }
+
+    // FORMAT HOTEL OUTPUT
+    const hotels = result.split("\n").filter(line => line.trim() !== "");
+
+    let formatted = `🏨 *HOTELS IN ${destination.toUpperCase()}*\n`;
+    formatted += `━━━━━━━━━━━━━━━━━━\n\n`;
+
+    let count = 1;
+
+    for (const hotel of hotels.slice(0,5)) {
+      formatted += `${count}️⃣ ${hotel}\n`;
+      formatted += `━━━━━━━━━━━━━━━━━━\n`;
+      count++;
+    }
+
+    return { success: true, data: formatted };
+
+  } catch (err) {
+    console.error("❌ Travel Engine error:", err.message);
+
+    return {
+      success: false,
+      message: "⚠️ Hotel information temporarily unavailable. Please try again later."
+    };
   }
+}
 
   // Get tourist places
   async getTouristPlaces(destination) {
@@ -107,29 +123,45 @@ class TravelEngine {
   }
 
   // Get itinerary
-  async getItinerary(destination, days, people, budget) {
-    try {
-      console.log(`📅 Getting itinerary for ${destination} (${days} days)`);
-      const result = await itineraryService.getItinerary(destination, days, people, budget);
-      
-      if (!result) {
-        return {
-          success: false,
-          message: "⚠️ Itinerary information temporarily unavailable. Please try again later."
-        };
-      }
-      
-      return { success: true, data: result };
-      
-    } catch (err) {
-      console.error("❌ Travel Engine error:", err.message);
+async getItinerary(destination, days, people, budget) {
+  try {
+    console.log(`🗺 Getting itinerary for ${destination} (${days} days)`);
+
+    const result = await itineraryService.getItinerary(destination, days, people, budget);
+
+    if (!result) {
       return {
         success: false,
         message: "⚠️ Itinerary information temporarily unavailable. Please try again later."
       };
     }
-  }
 
+    // FORMAT ITINERARY
+    const lines = result.split("\n").filter(line => line.trim() !== "");
+
+    let formatted = `🗺 *${days}-DAY ITINERARY*\n`;
+    formatted += `📍 ${destination.toUpperCase()}\n`;
+    formatted += `━━━━━━━━━━━━━━━━━━\n\n`;
+
+    for (const line of lines.slice(0,30)) {
+      if (line.toLowerCase().includes("day")) {
+        formatted += `📅 *${line}*\n`;
+      } else {
+        formatted += `• ${line}\n`;
+      }
+    }
+
+    return { success: true, data: formatted };
+
+  } catch (err) {
+    console.error("❌ Travel Engine error:", err.message);
+
+    return {
+      success: false,
+      message: "⚠️ Itinerary information temporarily unavailable. Please try again later."
+    };
+  }
+}
   // Get budget breakdown
   async getBudget(destination, totalBudget, people, days) {
     try {

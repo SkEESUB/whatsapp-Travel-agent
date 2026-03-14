@@ -92,12 +92,25 @@ class WebhookController {
     }
   }
 
-  async routeMessage(from, lower, text, session, sendMessageFn) {
-    // Greeting
-    if (["hi", "hello", "hii", "hey"].includes(lower)) {
-      await sendMessageFn(from, this.getGreetingMessage());
-      return;
-    }
+async routeMessage(from, lower, text, session, sendMessageFn) {
+
+  // NEW TRIP RESET
+  if (lower === "new trip") {
+    sessionManager.resetSession(session);
+
+    await sendMessageFn(
+      from,
+      "🔄 Starting a new trip!\n\nSend trip details like:\nDelhi 3 days 10000 2 people"
+    );
+
+    return;
+  }
+
+  // Greeting
+  if (["hi", "hello", "hii", "hey"].includes(lower)) {
+    await sendMessageFn(from, this.getGreetingMessage());
+    return;
+  }
 
     // Plan trip
     if (lower === "1" || lower === "plan trip") {
@@ -370,39 +383,50 @@ async handleItinerary(from, session, sendMessageFn) {
   async handleTripSave(from, session, trip, sendMessageFn) {
     const savedTrip = sessionManager.saveTrip(session, trip);
 
-    await sendMessageFn(
-      from,
-      `✅ Trip Saved!
+await sendMessageFn(
+  from,
+  `📋 *TRIP SUMMARY*
 
-📍 ${savedTrip.destination}
-📅 ${savedTrip.days} days
-💰 ₹${savedTrip.budget}
-👥 ${savedTrip.people}
-💵 Per person: ₹${savedTrip.perPersonBudget}
+📍 Destination: ${savedTrip.destination}
+📅 Days: ${savedTrip.days}
+👥 Travelers: ${savedTrip.people}
+💰 Total Budget: ₹${savedTrip.budget}
+💵 Per Person: ₹${savedTrip.perPersonBudget}
 
-Reply:
-2️⃣ Transport
-3️⃣ Hotels
-4️⃣ Itinerary
-5️⃣ Budget`
-    );
+──────────────
+
+Choose what you want:
+
+🚍 2 Transport
+🏨 3 Hotels
+🗺 4 Itinerary
+💰 5 Budget
+
+🔄 Type *new trip* anytime to start again.`
+);
   }
 
-  getGreetingMessage() {
-    return `👋 Hello! Welcome to TravelBot ✈️
+getGreetingMessage() {
+  return `👋 Welcome to *TravelBot* ✈️
+
+Plan your trip in seconds!
 
 Send trip details like:
 Delhi 3 days 10000 2 people
 
-Or reply:
-1️⃣ Plan Trip
-2️⃣ Transport
-3️⃣ Hotels
-4️⃣ Itinerary
-5️⃣ Budget
-6️⃣ Help`;
-  }
+──────────────
 
+📋 *Main Menu*
+
+1️⃣ Plan Trip  
+2️⃣ Transport Options  
+3️⃣ Hotel Suggestions  
+4️⃣ Travel Itinerary  
+5️⃣ Budget Planner  
+6️⃣ Help
+
+Tip: You can type commands like *Hotels* or *Itinerary* anytime.`;
+}
   getHelpMessage() {
     return `📋 Commands:
 

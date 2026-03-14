@@ -371,11 +371,6 @@ async handleFood(from, session, sendMessageFn) {
   }
 }
 
-async handleItinerary(from, session, sendMessageFn) {
-  if (!session.trip) {
-    await sendMessageFn(from, "❌ Please send trip details first.");
-    return;
-  }
 
 async handleItinerary(from, session, sendMessageFn) {
   if (!session.trip) {

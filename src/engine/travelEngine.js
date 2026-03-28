@@ -4,6 +4,7 @@ const hotelService = require("../services/hotelService");
 const itineraryService = require("../services/itineraryService");
 const budgetService = require("../services/budgetService");
 const distanceRules = require("../utils/distanceRules");
+const weatherService = require("../services/weatherService");
 
 class TravelEngine {
   // Get transport options based on mode
@@ -153,6 +154,21 @@ class TravelEngine {
       };
     }
   }
+  async getWeather(destination) {
+  try {
+    const result = await weatherService.getWeather(destination);
+
+    return {
+      success: true,
+      data: result,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: "⚠️ Weather data not available",
+    };
+  }
+ }
 }
 
 module.exports = new TravelEngine();

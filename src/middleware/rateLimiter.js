@@ -1,142 +1,321 @@
+// Rate Limiter Middleware
+// Per-user and global rate limiting using Redis sliding window algorithm
+
+const logger = require('../config/logger');
+const { getRedisClient, isRedisConnected, executeCommand } = require('../config/redis');
+
+// Configuration
+const RATE_LIMIT_CONFIG = {
+  // Per-user limits
+  user: {
+    perMinute: 30,
+    perHour: 200,
+    perDay: 500,
+  },
+  
+  // Global limits
+  global: {
+    perMinute: 1000,
+  },
+  
+  // Key prefixes
+  keys: {
+    userMinute: 'rl:user:minute:',
+    userHour: 'rl:user:hour:',
+    userDay: 'rl:user:day:',
+    globalMinute: 'rl:global:minute:',
+  },
+};
+
 /**
- * Rate Limiter Middleware
- * Simple in-memory rate limiting for API endpoints
+ * Sliding window rate limiter using Redis
  */
+async function checkRateLimit(key, limit, windowSeconds) {
+  try {
+    if (!isRedisConnected()) {
+      // If Redis is down, allow request (don't block users)
+      logger.warn('Redis down, rate limit check skipped', { key });
+      return { allowed: true, remaining: limit };
+    }
 
-// Store request counts: { [identifier]: { count, resetTime } }
-const requestStore = new Map();
+    const client = getRedisClient();
+    if (!client) {
+      return { allowed: true, remaining: limit };
+    }
 
-// Default configuration
-const DEFAULT_WINDOW_MS = 60 * 1000; // 1 minute
-const DEFAULT_MAX_REQUESTS = 30; // 30 requests per minute
-
-/**
- * Creates a rate limiter middleware
- * @param {Object} options - Rate limiter options
- * @param {number} options.windowMs - Time window in milliseconds
- * @param {number} options.maxRequests - Maximum requests per window
- * @param {string} options.keyPrefix - Prefix for the key (e.g., 'webhook', 'api')
- * @returns {Function} Express middleware
- */
-function createRateLimiter(options = {}) {
-  const windowMs = options.windowMs || DEFAULT_WINDOW_MS;
-  const maxRequests = options.maxRequests || DEFAULT_MAX_REQUESTS;
-  const keyPrefix = options.keyPrefix || 'default';
-
-  return function rateLimiter(req, res, next) {
-    // Get identifier (user ID for WhatsApp, IP for others)
-    const identifier = getIdentifier(req, keyPrefix);
     const now = Date.now();
+    const windowStart = now - (windowSeconds * 1000);
 
-    // Get or create entry
-    let entry = requestStore.get(identifier);
+    // Use Redis multi/pipeline for atomic operations
+    const pipeline = client.pipeline();
     
-    if (!entry || now > entry.resetTime) {
-      // New window
-      entry = {
-        count: 1,
-        resetTime: now + windowMs
-      };
-      requestStore.set(identifier, entry);
+    // Remove old entries outside window
+    pipeline.zremrangebyscore(key, 0, windowStart);
+    
+    // Count current entries in window
+    pipeline.zcard(key);
+    
+    // Add current request
+    pipeline.zadd(key, now, `${now}-${Math.random()}`);
+    
+    // Set expiry on key
+    pipeline.expire(key, windowSeconds + 60); // Extra 60s buffer
+
+    const results = await pipeline.exec();
+    
+    // Current count (before adding this request)
+    const currentCount = results[1][1];
+    
+    if (currentCount >= limit) {
+      // Rate limit exceeded
+      const oldestInWindow = await client.zrange(key, 0, 0, 'WITHSCORES');
+      let retryAfter = windowSeconds;
       
-      // Set headers
-      setRateLimitHeaders(res, entry, maxRequests, windowMs);
-      return next();
+      if (oldestInWindow && oldestInWindow[1]) {
+        const oldestTimestamp = parseInt(oldestInWindow[1]);
+        retryAfter = Math.ceil((oldestTimestamp + (windowSeconds * 1000) - now) / 1000);
+      }
+
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfter,
+        currentCount,
+        limit,
+      };
     }
 
-    // Increment count
-    entry.count++;
+    return {
+      allowed: true,
+      remaining: limit - currentCount - 1,
+      currentCount: currentCount + 1,
+      limit,
+    };
 
-    // Check limit
-    if (entry.count > maxRequests) {
-      setRateLimitHeaders(res, entry, maxRequests, windowMs);
-      return res.status(429).json({
-        success: false,
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: 'Too many requests. Please try again later.',
-          retryAfter: Math.ceil((entry.resetTime - now) / 1000)
-        }
-      });
-    }
+  } catch (error) {
+    logger.error('Rate limit check error', {
+      key,
+      error: error.message,
+    });
+    
+    // On error, allow request (fail-open)
+    return { allowed: true, remaining: limit };
+  }
+}
 
-    // Set headers and continue
-    setRateLimitHeaders(res, entry, maxRequests, windowMs);
-    next();
+/**
+ * Check per-user rate limits
+ */
+async function checkUserRateLimit(phoneNumber) {
+  const results = {};
+  
+  // Check per-minute limit
+  const minuteKey = `${RATE_LIMIT_CONFIG.keys.userMinute}${phoneNumber}`;
+  results.minute = await checkRateLimit(
+    minuteKey,
+    RATE_LIMIT_CONFIG.user.perMinute,
+    60
+  );
+  
+  // Check per-hour limit
+  const hourKey = `${RATE_LIMIT_CONFIG.keys.userHour}${phoneNumber}`;
+  results.hour = await checkRateLimit(
+    hourKey,
+    RATE_LIMIT_CONFIG.user.perHour,
+    3600
+  );
+  
+  // Check per-day limit
+  const dayKey = `${RATE_LIMIT_CONFIG.keys.userDay}${phoneNumber}`;
+  results.day = await checkRateLimit(
+    dayKey,
+    RATE_LIMIT_CONFIG.user.perDay,
+    86400
+  );
+  
+  // User is rate limited if ANY limit is exceeded
+  const isLimited = !results.minute.allowed || !results.hour.allowed || !results.day.allowed;
+  
+  if (isLimited) {
+    // Calculate longest wait time
+    const retryAfter = Math.max(
+      results.minute.retryAfter || 0,
+      results.hour.retryAfter || 0,
+      results.day.retryAfter || 0,
+    );
+    
+    logger.warn('⚠️ User rate limited', {
+      phoneNumber,
+      minuteCount: results.minute.currentCount,
+      hourCount: results.hour.currentCount,
+      dayCount: results.day.currentCount,
+      retryAfter,
+    });
+    
+    return {
+      allowed: false,
+      retryAfter,
+      limits: results,
+    };
+  }
+  
+  return {
+    allowed: true,
+    limits: results,
   };
 }
 
 /**
- * Gets identifier for rate limiting
- * @param {Object} req - Express request
- * @param {string} prefix - Key prefix
- * @returns {string} Identifier
+ * Check global rate limit
  */
-function getIdentifier(req, prefix) {
-  // For WhatsApp webhooks, use user ID if available
-  if (req.body && req.body.entry) {
-    try {
-      const changes = req.body.entry[0]?.changes;
-      if (changes && changes[0]?.value?.messages) {
-        const userId = changes[0].value.messages[0]?.from;
-        if (userId) {
-          return `${prefix}:${userId}`;
-        }
-      }
-    } catch (e) {
-      // Fall through to IP-based
-    }
+async function checkGlobalRateLimit() {
+  const globalKey = RATE_LIMIT_CONFIG.keys.globalMinute;
+  
+  const result = await checkRateLimit(
+    globalKey,
+    RATE_LIMIT_CONFIG.global.perMinute,
+    60
+  );
+  
+  if (!result.allowed) {
+    logger.warn('⚠️ Global rate limit exceeded', {
+      count: result.currentCount,
+      limit: result.limit,
+    });
   }
-
-  // Use IP address as fallback
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  return `${prefix}:${ip}`;
+  
+  return result;
 }
 
 /**
- * Sets rate limit headers on response
- * @param {Object} res - Express response
- * @param {Object} entry - Rate limit entry
- * @param {number} maxRequests - Maximum requests allowed
- * @param {number} windowMs - Window size in ms
+ * Express middleware for rate limiting
  */
-function setRateLimitHeaders(res, entry, maxRequests, windowMs) {
-  const remaining = Math.max(0, maxRequests - entry.count);
-  const resetInSeconds = Math.ceil((entry.resetTime - Date.now()) / 1000);
-
-  res.set({
-    'X-RateLimit-Limit': maxRequests,
-    'X-RateLimit-Remaining': remaining,
-    'X-RateLimit-Reset': resetInSeconds
+function rateLimiter(req, res, next) {
+  const phoneNumber = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+  
+  // Skip rate limit check if no phone number (e.g., webhook verification)
+  if (!phoneNumber) {
+    return next();
+  }
+  
+  // Check global rate limit first
+  checkGlobalRateLimit().then(globalResult => {
+    if (!globalResult.allowed) {
+      // Global limit exceeded - still return 200 to WhatsApp
+      logger.warn('Global rate limit hit, returning 200 to WhatsApp');
+      return res.status(200).json({
+        status: 'rate_limited',
+        message: 'Server temporarily busy. Please try again.',
+      });
+    }
+    
+    // Check per-user rate limit
+    checkUserRateLimit(phoneNumber).then(userResult => {
+      if (!userResult.allowed) {
+        // User rate limited - send friendly message via WhatsApp
+        const waitMinutes = Math.ceil(userResult.retryAfter / 60);
+        
+        logger.info('🚫 User rate limited, sending friendly message', {
+          phoneNumber,
+          retryAfter: userResult.retryAfter,
+        });
+        
+        // Still return 200 to WhatsApp (webhook requirement)
+        return res.status(200).json({
+          status: 'rate_limited',
+          message: `You're sending too many messages. Please wait ${waitMinutes} minute(s).`,
+          retryAfter: userResult.retryAfter,
+        });
+      }
+      
+      // All checks passed
+      next();
+    }).catch(error => {
+      logger.error('User rate limit check error', {
+        error: error.message,
+      });
+      // Fail-open: allow request on error
+      next();
+    });
+  }).catch(error => {
+    logger.error('Global rate limit check error', {
+      error: error.message,
+    });
+    // Fail-open: allow request on error
+    next();
   });
 }
 
 /**
- * Cleans up expired entries from the store
- * Run this periodically to prevent memory leaks
+ * Get user's current rate limit status
  */
-function cleanupExpiredEntries() {
-  const now = Date.now();
-  let cleaned = 0;
-
-  for (const [key, entry] of requestStore.entries()) {
-    if (now > entry.resetTime) {
-      requestStore.delete(key);
-      cleaned++;
-    }
-  }
-
-  if (cleaned > 0) {
-    console.log(`Rate limiter cleanup: removed ${cleaned} expired entries`);
+async function getUserRateLimitStatus(phoneNumber) {
+  const minuteKey = `${RATE_LIMIT_CONFIG.keys.userMinute}${phoneNumber}`;
+  const hourKey = `${RATE_LIMIT_CONFIG.keys.userHour}${phoneNumber}`;
+  const dayKey = `${RATE_LIMIT_CONFIG.keys.userDay}${phoneNumber}`;
+  
+  try {
+    const [minuteCount, hourCount, dayCount] = await Promise.all([
+      executeCommand('zcard', minuteKey),
+      executeCommand('zcard', hourKey),
+      executeCommand('zcard', dayKey),
+    ]);
+    
+    return {
+      minute: {
+        used: minuteCount || 0,
+        limit: RATE_LIMIT_CONFIG.user.perMinute,
+        remaining: Math.max(0, RATE_LIMIT_CONFIG.user.perMinute - (minuteCount || 0)),
+      },
+      hour: {
+        used: hourCount || 0,
+        limit: RATE_LIMIT_CONFIG.user.perHour,
+        remaining: Math.max(0, RATE_LIMIT_CONFIG.user.perHour - (hourCount || 0)),
+      },
+      day: {
+        used: dayCount || 0,
+        limit: RATE_LIMIT_CONFIG.user.perDay,
+        remaining: Math.max(0, RATE_LIMIT_CONFIG.user.perDay - (dayCount || 0)),
+      },
+    };
+  } catch (error) {
+    logger.error('Failed to get rate limit status', {
+      error: error.message,
+    });
+    return null;
   }
 }
 
-// Run cleanup every 5 minutes
-setInterval(cleanupExpiredEntries, 5 * 60 * 1000);
+/**
+ * Reset rate limits for a user (admin function)
+ */
+async function resetUserRateLimit(phoneNumber) {
+  try {
+    const minuteKey = `${RATE_LIMIT_CONFIG.keys.userMinute}${phoneNumber}`;
+    const hourKey = `${RATE_LIMIT_CONFIG.keys.userHour}${phoneNumber}`;
+    const dayKey = `${RATE_LIMIT_CONFIG.keys.userDay}${phoneNumber}`;
+    
+    await Promise.all([
+      executeCommand('del', minuteKey),
+      executeCommand('del', hourKey),
+      executeCommand('del', dayKey),
+    ]);
+    
+    logger.info('User rate limits reset', { phoneNumber });
+    return true;
+  } catch (error) {
+    logger.error('Failed to reset user rate limit', {
+      error: error.message,
+    });
+    return false;
+  }
+}
 
 module.exports = {
-  createRateLimiter,
-  cleanupExpiredEntries,
-  DEFAULT_WINDOW_MS,
-  DEFAULT_MAX_REQUESTS
+  rateLimiter,
+  checkUserRateLimit,
+  checkGlobalRateLimit,
+  getUserRateLimitStatus,
+  resetUserRateLimit,
+  RATE_LIMIT_CONFIG,
 };

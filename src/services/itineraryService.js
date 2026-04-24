@@ -1,6 +1,7 @@
-// Itinerary Service - Generate day-by-day travel plans
+// Itinerary Service - Generate day-by-day travel plans with caching
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const formatter = require("../utils/formatter");
+const cacheManager = require("../cache/cacheManager");
+const logger = require("../config/logger");
 
 let genAI = null;
 
@@ -24,17 +25,29 @@ async function generateGeminiResponse(prompt) {
     const result = await model.generateContent(prompt);
     return (await result.response).text().trim();
   } catch (err) {
-    console.error("❌ Gemini API error:", err.message);
+    logger.error("❌ Gemini API error", {
+      error: err.message,
+    });
     return null;
   }
 }
 
-async function getItinerary(destination, days, people, budget) {
-  const dailyBudget = Math.floor(budget / days);
+async function getItinerary(destination, days, people, budget, travelStyle = 'general') {
+  try {
+    // Generate cache key
+    const cacheKey = cacheManager.generateItineraryKey(destination, days, travelStyle);
 
-  const prompt = `${days}-day itinerary for ${destination}, India.
+    // Use cache-through pattern (longer TTL for itineraries)
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.ITINERARY,
+      async () => {
+        const dailyBudget = Math.floor(budget / days);
+
+        const prompt = `${days}-day itinerary for ${destination}, India.
 
 Travelers: ${people}, Daily budget: ~₹${dailyBudget}
+Style: ${travelStyle}
 
 Generate day-by-day plan:
 Day 1
@@ -50,13 +63,42 @@ Rules:
 
 Return ONLY the list.`;
 
-  const response = await generateGeminiResponse(prompt);
-  
-if (!response) {
-  return "⚠️ Itinerary generation failed. Please try again later.";
-}
-return response;
+        const response = await generateGeminiResponse(prompt);
+        
+        if (!response) {
+          return {
+            success: false,
+            message: "⚠️ Itinerary generation failed. Please try again later.",
+          };
+        }
 
+        return {
+          success: true,
+          data: response,
+        };
+      }
+    );
+
+    if (result.fromCache) {
+      logger.info('📦 Itinerary served from cache', {
+        destination,
+        days,
+        cacheKey,
+      });
+    }
+
+    return result.data.success ? result.data.data : result.data.message;
+
+  } catch (error) {
+    logger.error('Itinerary service error', {
+      destination,
+      error: error.message,
+    });
+    return "⚠️ Itinerary generation failed. Please try again later.";
+  }
+}
+
+// Parse Gemini response into structured itinerary data
 function parseItineraryResponse(text, days) {
   const lines = text.split('\n').filter(l => l.trim());
   const plan = [];

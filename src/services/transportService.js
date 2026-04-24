@@ -1,9 +1,11 @@
-// Transport Service - Generates structured transport options
+// Transport Service - Generates structured transport options with caching
 // Enforces: EXACTLY 4 options, no repetition, clean format
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const formatter = require("../utils/formatter");
 const distanceRules = require("../utils/distanceRules");
+const cacheManager = require("../cache/cacheManager");
+const bookingService = require("./bookingService");
+const logger = require("../config/logger");
 
 let genAI = null;
 
@@ -31,23 +33,32 @@ function getGeminiModel() {
 
 async function generateGeminiResponse(prompt) {
   try {
-    console.log("🤖 Gemini: Generating response...");
     const model = getGeminiModel();
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text().trim();
     
-    console.log("✅ Gemini: Response generated successfully");
     return text;
   } catch (err) {
-    console.error("❌ Gemini API error:", err.message);
+    logger.error("❌ Gemini API error", {
+      error: err.message,
+    });
     return null;
   }
 }
 
-// BUS SERVICE - Generate exactly 4 bus options
+// BUS SERVICE - Generate exactly 4 bus options with caching
 async function getBusOptions(origin, destination, budget, people) {
-  const prompt = `Indian bus options.
+  try {
+    // Generate cache key
+    const cacheKey = cacheManager.generateTransportKey(origin, destination, 'bus');
+
+    // Use cache-through pattern (shorter TTL for transport)
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.TRANSPORT,
+      async () => {
+        const prompt = `Indian bus options.
 
 Route: ${origin} to ${destination}
 Budget: ₹${budget} total for ${people} people
@@ -59,203 +70,243 @@ Generate EXACTLY 4 different bus types:
 4️⃣ AC Seater
 
 Format for each:
-Operator Name
-Depart: HH:MM
-Arrive: HH:MM
-Duration: Xh Ym
-Price: ₹XXX
-Type: Bus type
+🚌 *Operator Name*
+⏰ Depart: HH:MM
+🏁 Arrive: HH:MM
+⌛ Duration: Xh Ym
+💰 Price: ₹XXX
+🎫 Type: Bus type
 
 Rules:
 - EXACTLY 4 options
 - Different bus types
 - Real Indian operators (APSRTC, Orange Travels, VRL, SRS)
 - No explanations
-- Clean format only
+- Clean WhatsApp format only
 
 Return ONLY the list.`;
 
-  const response = await generateGeminiResponse(prompt);
-  
-  if (!response) {
-    return null;
+        const response = await generateGeminiResponse(prompt);
+        
+        if (!response) {
+          return {
+            success: false,
+            message: `🚌 *BUS OPTIONS* — ${origin} → ${destination}\n\n⚠️ Bus information temporarily unavailable. Please try again later.`,
+          };
+        }
+
+        return {
+          success: true,
+          data: `🚌 *BUS OPTIONS* — ${origin} → ${destination}\n👥 ${people} People | 💰 Budget: ₹${budget}\n\n${response}`,
+        };
+      }
+    );
+
+    if (result.fromCache) {
+      logger.info('📦 Bus options served from cache', {
+        origin,
+        destination,
+        cacheKey,
+      });
+    }
+
+    return result.data.success ? result.data.data : result.data.message;
+
+  } catch (err) {
+    logger.error('❌ Bus service error', {
+      origin,
+      destination,
+      error: err.message,
+    });
+    return `🚌 *BUS OPTIONS* — ${origin} → ${destination}\n\n⚠️ Bus service unavailable. Please try again.`;
   }
-  
-  return formatter.formatTransportOptions('Bus', origin, destination, budget, people, parseBusResponse(response));
 }
 
-// TRAIN SERVICE - Generate train options with names and numbers
+// TRAIN SERVICE - Generate train options with names and numbers (with caching)
 async function getTrainOptions(origin, destination, budget, people) {
-  const prompt = `Indian Railways train options.
+  try {
+    const cacheKey = cacheManager.generateTransportKey(origin, destination, 'train');
+
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.TRANSPORT,
+      async () => {
+        const prompt = `Indian Railways train options.
 
 Route: ${origin} to ${destination}
 Budget: ₹${budget} total for ${people} people
 
 Generate EXACTLY 4 trains with:
 Train Number + Name (e.g., "12722 Dakshin Express")
-Depart: HH:MM
-Arrive: HH:MM
-Duration: Xh Ym
-Classes: SL / 3A / 2A
-Price: ₹XXX–₹XXX
+
+Format for each:
+🚆 *Train Number - Train Name*
+⏰ Depart: HH:MM
+🏁 Arrive: HH:MM
+⌛ Duration: Xh Ym
+🎫 Classes: SL / 3A / 2A
+💰 Price: ₹XXX–₹XXX
 
 Rules:
 - EXACTLY 4 trains
 - Include train numbers
 - Real train names
 - No explanations
-- Clean format only
+- Clean WhatsApp format only
 
 Return ONLY the list.`;
 
-  const response = await generateGeminiResponse(prompt);
-  
-  if (!response) {
-    return null;
+        const response = await generateGeminiResponse(prompt);
+        
+        if (!response) {
+          return {
+            success: false,
+            message: `🚆 *TRAIN OPTIONS* — ${origin} → ${destination}\n\n⚠️ Train information temporarily unavailable. Please try again later.`,
+          };
+        }
+
+        return {
+          success: true,
+          data: `🚆 *TRAIN OPTIONS* — ${origin} → ${destination}\n👥 ${people} People | 💰 Budget: ₹${budget}\n\n${response}`,
+        };
+      }
+    );
+
+    if (result.fromCache) {
+      logger.info('📦 Train options served from cache', {
+        origin,
+        destination,
+        cacheKey,
+      });
+    }
+
+    return result.data.success ? result.data.data : result.data.message;
+
+  } catch (err) {
+    logger.error('❌ Train service error', {
+      origin,
+      destination,
+      error: err.message,
+    });
+    return `🚆 *TRAIN OPTIONS* — ${origin} → ${destination}\n\n⚠️ Train service unavailable. Please try again.`;
   }
-  
-  return formatter.formatTransportOptions('Train', origin, destination, budget, people, parseTrainResponse(response));
 }
 
-// FLIGHT SERVICE - Check distance rules first
+// FLIGHT SERVICE - Check distance rules first (with caching)
 async function getFlightOptions(origin, destination, budget, people) {
-  // Check if flights are available for this route
-  if (!distanceRules.isFlightAvailable(origin, destination)) {
-    return {
-      message: "✈️ Flights are not available between these cities.\n\nFor short distances, consider Bus or Train."
-    };
-  }
+  try {
+    // Check if flights are available for this route (don't cache this check)
+    if (!distanceRules.isFlightAvailable(origin, destination)) {
+      return `✈️ *FLIGHT OPTIONS* — ${origin} → ${destination}\n\n✈️ Flights are not available between these cities.\n\n💡 For short distances, consider Bus or Train.`;
+    }
 
-  const prompt = `Indian flight options.
+    const cacheKey = cacheManager.generateTransportKey(origin, destination, 'flight');
+
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.TRANSPORT,
+      async () => {
+        const prompt = `Indian flight options.
 
 Route: ${origin} to ${destination}
 Budget: ₹${budget} total for ${people} people
 
-Generate EXACTLY 4 flights from:
-IndiGo, Air India, Vistara, SpiceJet, Akasa Air
+Generate EXACTLY 4 flights from:\nIndiGo, Air India, Vistara, SpiceJet, Akasa Air
 
 Format for each:
-Airline + Flight Number (e.g., "IndiGo 6E 213")
-Depart: HH:MM
-Arrive: HH:MM
-Duration: Xh Ym
-Price: ₹XXX
+✈️ *Airline - Flight Number*
+⏰ Depart: HH:MM
+🏁 Arrive: HH:MM
+⌛ Duration: Xh Ym
+💰 Price: ₹XXX
 
 Rules:
 - EXACTLY 4 flights
 - Different airlines
 - Realistic flight numbers
 - No explanations
-- Clean format only
+- Clean WhatsApp format only
 
 Return ONLY the list.`;
 
-  const response = await generateGeminiResponse(prompt);
-  
-  if (!response) {
-    return null;
+        const response = await generateGeminiResponse(prompt);
+        
+        if (!response) {
+          return {
+            success: false,
+            message: `✈️ *FLIGHT OPTIONS* — ${origin} → ${destination}\n\n⚠️ Flight information temporarily unavailable. Please try again later.`,
+          };
+        }
+
+        return {
+          success: true,
+          data: `✈️ *FLIGHT OPTIONS* — ${origin} → ${destination}\n👥 ${people} People | 💰 Budget: ₹${budget}\n\n${response}`,
+        };
+      }
+    );
+
+    if (result.fromCache) {
+      logger.info('📦 Flight options served from cache', {
+        origin,
+        destination,
+        cacheKey,
+      });
+    }
+
+    return result.data.success ? result.data.data : result.data.message;
+
+  } catch (err) {
+    logger.error('❌ Flight service error', {
+      origin,
+      destination,
+      error: err.message,
+    });
+    return `✈️ *FLIGHT OPTIONS* — ${origin} → ${destination}\n\n⚠️ Flight service unavailable. Please try again.`;
   }
-  
-  return formatter.formatTransportOptions('Flight', origin, destination, budget, people, parseFlightResponse(response));
 }
 
-// Parse Gemini response into structured data
-function parseBusResponse(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  const options = [];
-  let current = {};
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^\d+️⃣/.test(trimmed) || trimmed.match(/^\d+\./)) {
-      if (Object.keys(current).length > 0) {
-        options.push(current);
-      }
-      current = { name: trimmed.replace(/^[0-9]+[️⃣\.]\s*/, '') };
-    } else if (trimmed.startsWith('Depart:')) {
-      current.depart = trimmed.replace('Depart:', '').trim();
-    } else if (trimmed.startsWith('Arrive:')) {
-      current.arrive = trimmed.replace('Arrive:', '').trim();
-    } else if (trimmed.startsWith('Duration:')) {
-      current.duration = trimmed.replace('Duration:', '').trim();
-    } else if (trimmed.startsWith('Price:')) {
-      current.price = trimmed.replace('Price:', '').replace('₹', '').trim();
-    } else if (trimmed.startsWith('Type:') || trimmed.startsWith('Operator')) {
-      current.operator = trimmed.replace(/^(Type:|Operator)/, '').replace(':', '').trim();
-    }
-  }
-  
-  if (Object.keys(current).length > 0) {
-    options.push(current);
-  }
-  
-  return options.slice(0, formatter.MAX_OPTIONS);
-}
+/**
+ * Append booking links to transport options
+ */
+function appendTransportBookingLinks(transportMessage, source, destination, date = new Date()) {
+  try {
+    // Generate booking links
+    const flightLink = bookingService.generateMMTFlightLink(source, destination, date);
+    const trainLink = bookingService.generateIRCTCLink(source, destination, date);
+    const busLink = bookingService.generateRedBusLink(source, destination, date);
 
-function parseTrainResponse(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  const options = [];
-  let current = {};
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^\d+️⃣/.test(trimmed) || trimmed.match(/^\d+\./)) {
-      if (Object.keys(current).length > 0) {
-        options.push(current);
-      }
-      current = { name: trimmed.replace(/^[0-9]+[️⃣\.]\s*/, '') };
-    } else if (trimmed.startsWith('Depart:')) {
-      current.depart = trimmed.replace('Depart:', '').trim();
-    } else if (trimmed.startsWith('Arrive:')) {
-      current.arrive = trimmed.replace('Arrive:', '').trim();
-    } else if (trimmed.startsWith('Duration:')) {
-      current.duration = trimmed.replace('Duration:', '').trim();
-    } else if (trimmed.startsWith('Classes:')) {
-      current.classes = trimmed.replace('Classes:', '').trim();
-    } else if (trimmed.startsWith('Price:')) {
-      current.price = trimmed.replace('Price:', '').trim();
+    // Append booking links
+    let message = transportMessage;
+    message += `\n\n━━━━━━━━━━━━━━━━\n`;
+    message += `🔗 *BOOK YOUR TICKETS:*\n\n`;
+    
+    if (flightLink) {
+      message += `✈️ Book flights (MakeMyTrip):\n${flightLink}\n\n`;
     }
-  }
-  
-  if (Object.keys(current).length > 0) {
-    options.push(current);
-  }
-  
-  return options.slice(0, formatter.MAX_OPTIONS);
-}
+    
+    if (trainLink) {
+      message += `🚂 Book trains (IRCTC):\n${trainLink}\n\n`;
+    }
+    
+    if (busLink) {
+      message += `🚌 Book bus (RedBus):\n${busLink}`;
+    }
 
-function parseFlightResponse(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  const options = [];
-  let current = {};
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^\d+️⃣/.test(trimmed) || trimmed.match(/^\d+\./)) {
-      if (Object.keys(current).length > 0) {
-        options.push(current);
-      }
-      current = { name: trimmed.replace(/^[0-9]+[️⃣\.]\s*/, '') };
-    } else if (trimmed.startsWith('Depart:')) {
-      current.depart = trimmed.replace('Depart:', '').trim();
-    } else if (trimmed.startsWith('Arrive:')) {
-      current.arrive = trimmed.replace('Arrive:', '').trim();
-    } else if (trimmed.startsWith('Duration:')) {
-      current.duration = trimmed.replace('Duration:', '').trim();
-    } else if (trimmed.startsWith('Price:')) {
-      current.price = trimmed.replace('Price:', '').replace('₹', '').trim();
-    }
+    message += `\n\n💡 Book through these links to support us!`;
+
+    return message;
+
+  } catch (error) {
+    logger.error('Failed to append transport booking links', {
+      error: error.message,
+    });
+    return transportMessage; // Return original message on error
   }
-  
-  if (Object.keys(current).length > 0) {
-    options.push(current);
-  }
-  
-  return options.slice(0, formatter.MAX_OPTIONS);
 }
 
 module.exports = {
   getBusOptions,
   getTrainOptions,
   getFlightOptions,
+  appendTransportBookingLinks,
 };

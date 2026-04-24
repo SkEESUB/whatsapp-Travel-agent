@@ -1,7 +1,9 @@
-// Weather Service - Fetch real-time weather data using Open-Meteo API
+// Weather Service - Fetch real-time weather data using Open-Meteo API with caching
 // No API key required for Open-Meteo
 
 const axios = require('axios');
+const cacheManager = require('../cache/cacheManager');
+const logger = require('../config/logger');
 
 /**
  * Get weather code description
@@ -40,59 +42,88 @@ function getWeatherDescription(code) {
 }
 
 /**
- * Get weather for a city
+ * Get weather for a city (with caching)
  * @param {string} cityName - Name of the city
  * @returns {Promise<object|null>} - Weather data or null
  */
 async function getWeather(cityName) {
   try {
-    console.log(`🌦 [Weather] Fetching weather for ${cityName}`);
+    // Generate cache key
+    const cacheKey = cacheManager.generateWeatherKey(cityName);
 
-    // Step 1: Geocode city name to get coordinates
-    const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`;
-    
-    const geocodeResponse = await axios.get(geocodeUrl);
-    
-    if (!geocodeResponse.data?.results?.[0]) {
-      console.warn(`⚠️ [Weather] City not found: ${cityName}`);
-      return null;
+    // Use cache-through pattern (short TTL for weather - changes frequently)
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.WEATHER,
+      async () => {
+        // Step 1: Geocode city name to get coordinates
+        const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`;
+        
+        const geocodeResponse = await axios.get(geocodeUrl);
+        
+        if (!geocodeResponse.data?.results?.[0]) {
+          logger.warn(`⚠️ City not found: ${cityName}`);
+          return {
+            success: false,
+            message: `⚠️ Location not found: ${cityName}`,
+          };
+        }
+
+        const location = geocodeResponse.data.results[0];
+        const latitude = location.latitude;
+        const longitude = location.longitude;
+
+        // Step 2: Fetch weather data using coordinates
+        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
+        
+        const weatherResponse = await axios.get(weatherUrl);
+        
+        if (!weatherResponse.data?.current_weather) {
+          logger.warn(`⚠️ No weather data available`);
+          return {
+            success: false,
+            message: `⚠️ Weather data unavailable for ${cityName}`,
+          };
+        }
+
+        const currentWeather = weatherResponse.data.current_weather;
+        const temperature = currentWeather.temperature;
+        const weatherCode = currentWeather.weathercode;
+        const windSpeed = currentWeather.windspeed;
+        
+        const condition = getWeatherDescription(weatherCode);
+
+        return {
+          success: true,
+          data: {
+            temperature,
+            condition,
+            weatherCode,
+            windSpeed,
+            city: cityName,
+          },
+        };
+      }
+    );
+
+    if (result.fromCache) {
+      logger.info('📦 Weather served from cache', {
+        city: cityName,
+        cacheKey,
+      });
     }
 
-    const location = geocodeResponse.data.results[0];
-    const latitude = location.latitude;
-    const longitude = location.longitude;
-
-    console.log(`📍 [Weather] Coordinates: ${latitude}, ${longitude}`);
-
-    // Step 2: Fetch weather data using coordinates
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
-    
-    const weatherResponse = await axios.get(weatherUrl);
-    
-    if (!weatherResponse.data?.current_weather) {
-      console.warn(`⚠️ [Weather] No weather data available`);
-      return null;
+    if (result.data.success) {
+      return result.data.data;
     }
 
-    const currentWeather = weatherResponse.data.current_weather;
-    const temperature = currentWeather.temperature;
-    const weatherCode = currentWeather.weathercode;
-    const windSpeed = currentWeather.windspeed;
-    
-    const condition = getWeatherDescription(weatherCode);
-
-    console.log(`✅ [Weather] Retrieved: ${temperature}°C, ${condition}`);
-
-    return {
-      temperature,
-      condition,
-      weatherCode,
-      windSpeed,
-      city: cityName,
-    };
+    return null;
 
   } catch (error) {
-    console.error('❌ [Weather] Error:', error.message);
+    logger.error('❌ Weather service error', {
+      city: cityName,
+      error: error.message,
+    });
     return null;
   }
 }

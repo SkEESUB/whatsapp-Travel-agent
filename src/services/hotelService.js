@@ -1,6 +1,8 @@
-// Hotel Service - Generate structured hotel recommendations
+// Hotel Service - Generate structured hotel recommendations with caching
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const formatter = require("../utils/formatter");
+const cacheManager = require('../cache/cacheManager');
+const bookingService = require('./bookingService');
+const logger = require('../config/logger');
 
 let genAI = null;
 
@@ -28,16 +30,28 @@ async function generateGeminiResponse(prompt) {
     const response = await result.response;
     return response.text().trim();
   } catch (err) {
-    console.error("❌ Gemini API error:", err.message);
+    logger.error("❌ Gemini API error", {
+      error: err.message,
+    });
     return null;
   }
 }
 
 async function getHotels(destination, hotelBudget, days) {
-  const totalNights = days > 1 ? days - 1 : 1;
-  const perNight = Math.floor(hotelBudget / totalNights);
+  try {
+    // Generate cache key
+    const cacheKey = cacheManager.generateHotelKey(destination, hotelBudget, 1);
 
-  const prompt = `Hotels in ${destination}, India.
+    // Use cache-through pattern
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.HOTELS,
+      async () => {
+        // This function only runs on cache miss
+        const totalNights = days > 1 ? days - 1 : 1;
+        const perNight = Math.floor(hotelBudget / totalNights);
+
+        const prompt = `Hotels in ${destination}, India.
 
 Budget: ₹${hotelBudget} for ${totalNights} nights (~₹${perNight}/night)
 
@@ -57,12 +71,46 @@ Rules:
 
 Return ONLY the list.`;
 
-  const response = await generateGeminiResponse(prompt);
-  if (!response) {
-  return "⚠️ Hotel information temporarily unavailable. Please try again later.";
-}
-return response;
+        const response = await generateGeminiResponse(prompt);
+        
+        if (!response) {
+          return {
+            success: false,
+            message: "⚠️ Hotel information temporarily unavailable. Please try again later.",
+          };
+        }
 
+        return {
+          success: true,
+          data: response,
+        };
+      }
+    );
+
+    // Return cached or fresh data
+    if (result.fromCache) {
+      logger.info('📦 Hotels served from cache', {
+        destination,
+        cacheKey,
+      });
+    }
+
+    if (result.data.success) {
+      return result.data.data; // Return the actual hotel text
+    }
+
+    return result.data.message;
+
+  } catch (error) {
+    logger.error('Hotels service error', {
+      destination,
+      error: error.message,
+    });
+    return "⚠️ Hotel information temporarily unavailable. Please try again later.";
+  }
+}
+
+// Parse Gemini response into structured hotel data
 function parseHotelResponse(text) {
   const lines = text.split('\n').filter(l => l.trim());
   const hotels = { budget: [], midRange: [], premium: [] };
@@ -98,4 +146,43 @@ function parseHotelResponse(text) {
   return hotels;
 }
 
-module.exports = { getHotels };
+/**
+ * Append booking links to hotel recommendations
+ */
+function appendHotelBookingLinks(hotelMessage, destination, days = 3, options = {}) {
+  try {
+    const { checkin = new Date(), checkout = null } = options;
+    
+    // Calculate checkout date if not provided
+    const checkoutDate = checkout || new Date(new Date(checkin).getTime() + days * 24 * 60 * 60 * 1000);
+
+    // Generate booking links
+    const mmtLink = bookingService.generateMMTHotelLink(destination, checkin, checkoutDate);
+    const bookingComLink = bookingService.generateBookingComLink(destination, checkin, checkoutDate);
+
+    // Append booking links
+    let message = hotelMessage;
+    message += `\n\n━━━━━━━━━━━━━━━━\n`;
+    message += `🔗 *BOOK YOUR STAY:*\n\n`;
+    
+    if (mmtLink) {
+      message += `🏨 Book on MakeMyTrip:\n${mmtLink}\n\n`;
+    }
+    
+    if (bookingComLink) {
+      message += `🌍 Compare prices on Booking.com:\n${bookingComLink}`;
+    }
+
+    message += `\n\n💡 Book through these links to support us!`;
+
+    return message;
+
+  } catch (error) {
+    logger.error('Failed to append hotel booking links', {
+      error: error.message,
+    });
+    return hotelMessage; // Return original message on error
+  }
+}
+
+module.exports = { getHotels, appendHotelBookingLinks };

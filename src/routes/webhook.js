@@ -18,12 +18,28 @@ router.get("/", (req, res) => {
 
 // Receive messages
 router.post("/", async (req, res) => {
-  res.sendStatus(200);
-  await webhookController.handleMessage(req, res, sendMessage);
+  try {
+    // Always respond to WhatsApp immediately to prevent retries
+    res.sendStatus(200);
+    
+    // Process message in background
+    await webhookController.handleMessage(req, res, sendMessage);
+  } catch (err) {
+    console.error('❌ [Webhook Route] Error:', err);
+    // Still send 200 to WhatsApp to prevent retries
+    if (!res.headersSent) {
+      res.sendStatus(200);
+    }
+  }
 });
 
 async function sendMessage(to, text) {
   try {
+    if (!process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+      console.error('❌ [SendMessage] Missing WhatsApp credentials');
+      return;
+    }
+
     await axios.post(
       `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
       {
@@ -38,10 +54,10 @@ async function sendMessage(to, text) {
         },
       }
     );
-    console.log(`📤 Message sent to ${to}`);
+    console.log(`📤 [SendMessage] Success to ${to}`);
   } catch (err) {
     console.error(
-      "❌ Failed to send message:",
+      `❌ [SendMessage] Failed to send message to ${to}:`,
       err.response?.data || err.message
     );
   }

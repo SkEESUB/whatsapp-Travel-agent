@@ -1,6 +1,7 @@
-// Budget Service - Generate structured budget breakdown
+// Budget Service - Generate structured budget breakdown with caching
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const formatter = require("../utils/formatter");
+const cacheManager = require("../cache/cacheManager");
+const logger = require("../config/logger");
 
 let genAI = null;
 
@@ -24,13 +25,24 @@ async function generateGeminiResponse(prompt) {
     const result = await model.generateContent(prompt);
     return (await result.response).text().trim();
   } catch (err) {
-    console.error("❌ Gemini API error:", err.message);
+    logger.error("❌ Gemini API error", {
+      error: err.message,
+    });
     return null;
   }
 }
 
 async function getBudgetPlan(destination, totalBudget, people, days) {
-  const prompt = `Budget breakdown for ${destination} trip.
+  try {
+    // Generate cache key (uses normalized budget range)
+    const cacheKey = cacheManager.generateBudgetKey(destination, days, people, totalBudget);
+
+    // Use cache-through pattern
+    const result = await cacheManager.cachedCall(
+      cacheKey,
+      cacheManager.TTL_CONFIG.BUDGET,
+      async () => {
+        const prompt = `Budget breakdown for ${destination} trip.
 
 Total: ₹${totalBudget}, People: ${people}, Days: ${days}
 
@@ -49,21 +61,79 @@ Rules:
 
 Return ONLY the list.`;
 
-  const response = await generateGeminiResponse(prompt);
-  
-  if (!response) {
-    // Fallback to logic-based breakdown
-    return formatter.formatBudget(destination, totalBudget, people, days, {
+        const response = await generateGeminiResponse(prompt);
+        
+        if (!response) {
+          // Fallback to logic-based breakdown
+          const breakdown = {
+            transport: Math.floor(totalBudget * 0.3),
+            hotel: Math.floor(totalBudget * 0.4),
+            food: Math.floor(totalBudget * 0.2),
+            localTravel: Math.floor(totalBudget * 0.05),
+            emergencyBuffer: Math.floor(totalBudget * 0.05),
+          };
+
+          return {
+            success: true,
+            data: formatBudgetText(destination, totalBudget, people, days, breakdown),
+          };
+        }
+
+        const breakdown = parseBudgetResponse(response, totalBudget);
+        return {
+          success: true,
+          data: formatBudgetText(destination, totalBudget, people, days, breakdown),
+        };
+      }
+    );
+
+    if (result.fromCache) {
+      logger.info('📦 Budget plan served from cache', {
+        destination,
+        cacheKey,
+      });
+    }
+
+    return result.data.data;
+
+  } catch (error) {
+    logger.error('Budget service error', {
+      destination,
+      error: error.message,
+    });
+
+    // Fallback on error
+    const breakdown = {
       transport: Math.floor(totalBudget * 0.3),
       hotel: Math.floor(totalBudget * 0.4),
       food: Math.floor(totalBudget * 0.2),
       localTravel: Math.floor(totalBudget * 0.05),
       emergencyBuffer: Math.floor(totalBudget * 0.05),
-    });
-  }
+    };
 
-  const breakdown = parseBudgetResponse(response, totalBudget);
-  return formatter.formatBudget(destination, totalBudget, people, days, breakdown);
+    return formatBudgetText(destination, totalBudget, people, days, breakdown);
+  }
+}
+
+/**
+ * Format budget breakdown as text
+ */
+function formatBudgetText(destination, totalBudget, people, days, breakdown) {
+  const perPerson = Math.floor(totalBudget / people);
+  const perDay = Math.floor(totalBudget / days);
+
+  return `💰 *BUDGET BREAKDOWN* — ${destination}
+👥 ${people} People | 📅 ${days} Days
+💵 Total: ₹${totalBudget}
+👤 Per Person: ₹${perPerson}
+📊 Per Day: ₹${perDay}
+
+Breakdown:
+🚍 Transport: ₹${breakdown.transport || Math.floor(totalBudget * 0.3)}
+🏨 Hotel: ₹${breakdown.hotel || Math.floor(totalBudget * 0.4)}
+🍛 Food: ₹${breakdown.food || Math.floor(totalBudget * 0.2)}
+🚕 Local Travel: ₹${breakdown.localTravel || Math.floor(totalBudget * 0.05)}
+⚠️ Emergency: ₹${breakdown.emergencyBuffer || Math.floor(totalBudget * 0.05)}`;
 }
 
 function parseBudgetResponse(text, totalBudget) {

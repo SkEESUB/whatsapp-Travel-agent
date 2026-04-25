@@ -131,7 +131,7 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ joinedAt: -1 });
 userSchema.index({ lastActiveAt: -1 });
 userSchema.index({ 'subscription.plan': 1 });
-userSchema.index({ 'referral.code': 1 });
+// Note: referral.code index is auto-created by unique: true
 userSchema.index({ totalTrips: -1 });
 
 // Virtual: Days since joined

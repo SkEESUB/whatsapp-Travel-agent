@@ -1,10 +1,12 @@
 const express = require("express");
-const axios = require("axios");
 const webhookController = require("../controllers/webhookController");
+const { verifyWebhookSignature } = require("../middleware/webhookVerifier");
+const { validateInput } = require("../middleware/inputValidator");
+const { rateLimiter } = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
-// Verify webhook
+// Verify webhook (GET challenge)
 router.get("/", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -16,23 +18,32 @@ router.get("/", (req, res) => {
   return res.sendStatus(403);
 });
 
-// Receive messages
-router.post("/", async (req, res) => {
-  try {
-    // Always respond to WhatsApp immediately to prevent retries
-    res.sendStatus(200);
-    
-    // Process message in background
-    await webhookController.handleMessage(req, res, sendMessage);
-  } catch (err) {
-    console.error('❌ [Webhook Route] Error:', err);
-    // Still send 200 to WhatsApp to prevent retries
-    if (!res.headersSent) {
+// Receive messages (POST webhook)
+// Apply signature verifier, input validator, and rate limiter
+router.post(
+  "/",
+  verifyWebhookSignature,
+  validateInput,
+  rateLimiter,
+  async (req, res) => {
+    try {
+      // Always respond to WhatsApp immediately to prevent retries
       res.sendStatus(200);
+      
+      // Handle the validated message in the background
+      await webhookController.handleMessage(req, res, sendMessage);
+    } catch (err) {
+      console.error('❌ [Webhook Route] Error in handleMessage:', err);
+      // Still send 200 to WhatsApp to prevent retries
+      if (!res.headersSent) {
+        res.sendStatus(200);
+      }
     }
   }
-});
+);
 
+// Fallback message sender for WhatsApp API communication
+const axios = require("axios");
 async function sendMessage(to, text) {
   try {
     if (!process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {

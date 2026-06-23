@@ -52,10 +52,10 @@ const TRAVEL_PREFERENCES = {
  */
 function parseIndianNumber(text) {
   // Remove commas and spaces
-  text = text.replace(/[,\\s]/g, '');
+  text = text.replace(/[, \s]/g, '');
 
   // Match number with suffix
-  const match = text.match(/(\\d+(?:\\.\\d+)?)(k|K|l|L|lakhs?|crores?|cr|Cr)?/i);
+  const match = text.match(/(\d+(?:\.\d+)?)(k|K|l|L|lakhs?|crores?|cr|Cr)?/i);
   
   if (!match) return null;
 
@@ -87,10 +87,10 @@ function parseIndianNumber(text) {
  */
 function extractNumbers(text) {
   // Remove commas from numbers (e.g., 10,000 → 10000)
-  const cleaned = text.replace(/(\\d+),(\\d+)/g, '$1$2');
+  const cleaned = text.replace(/(\d+),(\d+)/g, '$1$2');
   
   // Find all numbers (including Indian format)
-  const matches = cleaned.match(/\\d+(?:\\.\\d+)?(?:k|K|l|L|lakhs?|crores?|cr|Cr)?/gi);
+  const matches = cleaned.match(/\d+(?:\.\d+)?(?:k|K|l|L|lakhs?|crores?|cr|Cr)?/gi);
   
   if (!matches) return [];
 
@@ -101,7 +101,7 @@ function extractNumbers(text) {
  * Find city name in text
  */
 function findCity(text) {
-  const words = text.toLowerCase().split(/\\s+/);
+  const words = text.toLowerCase().split(/\s+/);
   
   // Check for multi-word cities first
   const cityNames = Object.keys(CITY_ALIASES);
@@ -131,7 +131,7 @@ function extractCities(text) {
   const lowerText = text.toLowerCase();
   
   // Look for "X to Y" pattern
-  const toPattern = lowerText.match(/(.+?)\\s+to\\s+(.+)/);
+  const toPattern = lowerText.match(/(.+?)\s+to\s+(.+)/);
   
   if (toPattern) {
     const source = findCity(toPattern[1]);
@@ -143,7 +143,7 @@ function extractCities(text) {
   }
 
   // Look for "from X to Y" pattern
-  const fromPattern = lowerText.match(/from\\s+(.+?)\\s+to\\s+(.+)/);
+  const fromPattern = lowerText.match(/from\s+(.+?)\s+to\s+(.+)/);
   
   if (fromPattern) {
     const source = findCity(fromPattern[1]);
@@ -183,20 +183,23 @@ function extractDays(text) {
     return 2; // Default weekend trip
   }
 
-  // Check for "week" or "weeks"
-  const weekMatch = lowerText.match(/(\\d+)\\s*weeks?/);
+  // Check for "a week", "one week", or "X weeks"
+  if (lowerText.includes('a week') || lowerText.includes('one week')) {
+    return 7;
+  }
+  const weekMatch = lowerText.match(/(\d+)\s*weeks?/);
   if (weekMatch) {
     return parseInt(weekMatch[1]) * 7;
   }
 
   // Check for "X days" or "X day"
-  const dayMatch = lowerText.match(/(\\d+)\\s*days?/);
+  const dayMatch = lowerText.match(/(\d+)\s*days?/);
   if (dayMatch) {
     return parseInt(dayMatch[1]);
   }
 
   // Check for "X nights"
-  const nightMatch = lowerText.match(/(\\d+)\\s*nights?/);
+  const nightMatch = lowerText.match(/(\d+)\s*nights?/);
   if (nightMatch) {
     return parseInt(nightMatch[1]) + 1; // Nights + 1 = Days
   }
@@ -217,7 +220,7 @@ function extractBudget(text) {
     const match = text.match(pattern);
     
     if (match) {
-      const numMatch = match[0].match(/\\d+/);
+      const numMatch = match[0].match(/\d+/);
       if (numMatch) {
         return parseIndianNumber(numMatch[0]);
       }
@@ -249,9 +252,9 @@ function extractPeople(text) {
 
   // Check for explicit patterns
   const patterns = [
-    /(\\d+)\\s*(people|person|persons|pax|travellers?|members?)/i,
-    /(for|with)\\s*(\\d+)\\s*(people|person|persons|pax)/i,
-    /(\\d+)\\s*(people|person|persons|pax)/i,
+    /(\d+)\s*(people|person|persons|pax|travellers?|members?)/i,
+    /(for|with)\s*(\d+)\s*(people|person|persons|pax)/i,
+    /(\d+)\s*(people|person|persons|pax)/i,
   ];
 
   for (const pattern of patterns) {

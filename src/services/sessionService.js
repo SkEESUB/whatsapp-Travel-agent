@@ -478,6 +478,7 @@ async function cleanupExpiredSessions() {
 // Export all functions
 module.exports = {
   getSession,
+  saveSession,
   updateSession,
   updateTripData,
   setState,

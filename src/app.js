@@ -65,7 +65,55 @@ logger.debug("VERIFY TOKEN FROM ENV:", {
 // ROUTES
 // =====================
 const webhookRoutes = require("./routes/webhook");
+const adminRoutes = require("./routes/admin");
+const healthRoutes = require("./routes/health");
+const paymentRoutes = require("./routes/payment");
+const linkShortener = require("./utils/linkShortener");
+const AffiliateClick = require("./models/AffiliateClick");
+
 app.use("/webhook", webhookRoutes);
+app.use("/admin", adminRoutes);
+app.use("/health", healthRoutes);
+app.use("/payment", paymentRoutes);
+
+// Short Link redirect endpoint
+app.get("/l/:code", async (req, res, next) => {
+  try {
+    const code = req.params.code;
+    const result = await linkShortener.getUrl(code);
+    
+    if (!result) {
+      return res.status(404).send("Link expired or not found");
+    }
+    
+    // Track click if metadata exists
+    if (result.metadata && Object.keys(result.metadata).length > 0) {
+      try {
+        const { userPhoneHash, platform, linkType, destination, source, tripId } = result.metadata;
+        await AffiliateClick.trackClick({
+          userPhoneHash: userPhoneHash || 'anonymous',
+          platform: platform || 'makemytrip',
+          linkType: linkType || 'hotel',
+          destination: destination || 'unknown',
+          source: source || '',
+          tripId,
+          metadata: {
+            userAgent: req.headers['user-agent'],
+            referrer: req.headers['referer'],
+          }
+        });
+        logger.info('Affiliate link click tracked successfully', { platform, destination });
+      } catch (err) {
+        logger.error('Failed to track affiliate click on redirect', { error: err.message });
+      }
+    }
+    
+    return res.redirect(result.longUrl);
+  } catch (error) {
+    next(error);
+  }
+});
+
 
 // =====================
 // ERROR HANDLING MIDDLEWARE (MUST BE LAST)
@@ -81,8 +129,10 @@ app.use(ErrorHandler.handle());
 // =====================
 // START SERVER
 // =====================
+const database = require("./config/database");
+
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   logger.info('\n' + '='.repeat(60));
   logger.info('🚀 SERVER STARTED SUCCESSFULLY');
   logger.info('='.repeat(60));
@@ -94,6 +144,15 @@ const server = app.listen(PORT, () => {
   logger.info('Request Logging: ENABLED (with request ID tracking)');
   logger.info('API Logging: ENABLED (Gemini, Weather, WhatsApp)');
   logger.info('='.repeat(60) + '\n');
+
+  // Connect to MongoDB
+  try {
+    await database.connect();
+  } catch (err) {
+    logger.error('Initial MongoDB connection failed. Database features may be unavailable.', {
+      error: err.message
+    });
+  }
 });
 
 // Graceful shutdown

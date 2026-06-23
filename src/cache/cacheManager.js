@@ -377,55 +377,7 @@ async function getCacheSize() {
 }
 
 // Export
-/**
- * Get cache statistics
- */
-async function getCacheStats() {
-  try {
-    if (!isRedisConnected()) {
-      return {
-        status: 'disconnected',
-        hitRate: 0,
-        missRate: 0,
-        memoryUsage: 'N/A',
-      };
-    }
-
-    // Get Redis info
-    const info = await executeCommand('info', 'stats');
-    
-    // Parse hits and misses
-    const keyspaceHits = info.match(/keyspace_hits:(\d+)/)?.[1] || 0;
-    const keyspaceMisses = info.match(/keyspace_misses:(\d+)/)?.[1] || 0;
-    
-    const total = parseInt(keyspaceHits) + parseInt(keyspaceMisses);
-    const hitRate = total > 0 ? Math.round((parseInt(keyspaceHits) / total) * 100) : 0;
-    const missRate = total > 0 ? Math.round((parseInt(keyspaceMisses) / total) * 100) : 0;
-
-    // Get memory usage
-    const memoryInfo = await executeCommand('info', 'memory');
-    const usedMemory = memoryInfo.match(/used_memory_human:(.+)/)?.[1] || 'N/A';
-
-    return {
-      status: 'connected',
-      hitRate: `${hitRate}%`,
-      missRate: `${missRate}%`,
-      hits: keyspaceHits,
-      misses: keyspaceMisses,
-      total: total,
-      memoryUsage: usedMemory,
-    };
-
-  } catch (error) {
-    logger.error('Failed to get cache stats', {
-      error: error.message,
-    });
-    return {
-      status: 'error',
-      error: error.message,
-    };
-  }
-}
+// Duplicate getCacheStats removed to fix syntax error (already defined on line 248)
 
 module.exports = {
   // Key generators

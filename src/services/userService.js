@@ -369,6 +369,77 @@ async function getUserStats(phoneNumber) {
   }
 }
 
+/**
+ * Get user by phone number (wrapper for getUser)
+ */
+async function getUserByPhone(phoneNumber) {
+  return getUser(phoneNumber);
+}
+
+/**
+ * Create a new user with custom data
+ */
+async function createUser(phoneNumber, data = {}) {
+  try {
+    const phoneHash = hashPhoneNumber(phoneNumber);
+    
+    // Merge base data with subscription
+    const userDoc = new User({
+      phoneHash,
+      ...data,
+    });
+    
+    userDoc.generateReferralCode();
+    await userDoc.save();
+    
+    return userDoc.toObject();
+  } catch (error) {
+    logger.error('Failed to create user', {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Update user subscription details
+ */
+async function updateUserSubscription(phoneNumber, subscriptionData) {
+  try {
+    const phoneHash = hashPhoneNumber(phoneNumber);
+    const { plan, expiresAt, tripsRemaining } = subscriptionData;
+    
+    const user = await User.findOneAndUpdate(
+      { phoneHash },
+      {
+        $set: {
+          'subscription.plan': plan,
+          'subscription.expiresAt': expiresAt,
+          'subscription.tripsRemaining': tripsRemaining,
+        },
+      },
+      { new: true }
+    );
+    
+    if (user) {
+      logger.info('User subscription updated in database', {
+        phoneNumber: phoneHash.substring(0, 10) + '...',
+        plan,
+        expiresAt,
+        tripsRemaining,
+      });
+      return user.toObject();
+    }
+    
+    return null;
+  } catch (error) {
+    logger.error('Failed to update user subscription', {
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
 module.exports = {
   findOrCreateUser,
   updateUserActivity,
@@ -378,7 +449,11 @@ module.exports = {
   incrementTripCount,
   addFavoriteDestination,
   getUser,
+  getUserByPhone,
+  createUser,
+  updateUserSubscription,
   blockUser,
   unblockUser,
   getUserStats,
 };
+

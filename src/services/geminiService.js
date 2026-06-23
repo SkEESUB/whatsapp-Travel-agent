@@ -44,6 +44,9 @@ async function generateAIResponse(prompt) {
   }
 }
 
+// Alias the function so that internal calls using both names work perfectly
+const generateGeminiResponse = generateAIResponse;
+
 
 
 // Transport options (Bus / Train / Flight)

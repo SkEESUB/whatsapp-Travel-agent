@@ -11,7 +11,7 @@ WORKDIR /app
 # Copy package files first (for layer caching)
 COPY package*.json ./
 
-# Install all dependencies (including devDependencies for build)
+# Install all dependencies
 RUN npm ci
 
 # Copy source code
@@ -20,9 +20,8 @@ COPY . .
 # Stage 2: Production
 FROM node:20-alpine AS production
 
-# Add labels for metadata
-LABEL maintainer="your-email@example.com"
-LABEL description="WhatsApp Travel Bot - Production"
+LABEL maintainer="EESUB"
+LABEL description="TravelBuddy WhatsApp Travel Bot - Production"
 LABEL version="1.0.0"
 
 # Set environment variables
@@ -34,7 +33,6 @@ ENV NPM_CONFIG_LOGLEVEL=warn
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 -G nodejs
 
-# Set working directory
 WORKDIR /app
 
 # Copy package files
@@ -46,7 +44,6 @@ RUN npm ci --only=production && \
 
 # Copy application code from builder
 COPY --from=builder /app/src ./src
-COPY --from=builder /app/.env* ./
 
 # Create directories for logs and temp files
 RUN mkdir -p /app/logs /app/tmp && \
@@ -58,9 +55,9 @@ USER nodejs
 # Expose port (from ENV)
 EXPOSE ${PORT}
 
-# Health check
+# Health check (endpoint is /health in our app now)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
 # Start application
 CMD ["node", "src/app.js"]

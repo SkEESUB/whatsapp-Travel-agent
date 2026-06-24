@@ -62,7 +62,65 @@ function formatUptime(seconds) {
   return parts.join(' ');
 }
 
+const { isRedisConnected, getConnectionStatus } = require('../config/redis');
+const mongoose = require('mongoose');
+
+/**
+ * GET /health/redis
+ * Returns Redis health status
+ */
+const getRedisHealth = (req, res) => {
+  const isConnected = isRedisConnected();
+  const status = getConnectionStatus();
+  
+  if (isConnected) {
+    res.status(200).json({
+      status: 'healthy',
+      service: 'redis',
+      details: status
+    });
+  } else {
+    res.status(503).json({
+      status: 'unhealthy',
+      service: 'redis',
+      details: status
+    });
+  }
+};
+
+/**
+ * GET /health/mongo
+ * Returns MongoDB health status
+ */
+const getMongoHealth = (req, res) => {
+  const readyState = mongoose.connection.readyState;
+  const states = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
+  };
+  
+  const state = states[readyState] || 'unknown';
+  
+  if (readyState === 1) {
+    res.status(200).json({
+      status: 'healthy',
+      service: 'mongodb',
+      readyState: state
+    });
+  } else {
+    res.status(503).json({
+      status: 'unhealthy',
+      service: 'mongodb',
+      readyState: state
+    });
+  }
+};
+
 module.exports = {
   getHealth,
-  getDetailedHealth
+  getDetailedHealth,
+  getRedisHealth,
+  getMongoHealth
 };

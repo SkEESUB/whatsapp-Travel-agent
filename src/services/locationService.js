@@ -2,6 +2,7 @@
 // Reverse geocodes coordinates to city name for trip planning
 
 const axios = require('axios');
+const cacheManager = require('../cache/cacheManager');
 const logger = require('../config/logger');
 
 // Configuration
@@ -162,17 +163,35 @@ async function reverseGeocodeWithOpenWeather(lat, lng) {
  */
 async function reverseGeocode(lat, lng) {
   try {
-    // Try Google Maps first (more accurate)
-    try {
-      return await reverseGeocodeWithGoogle(lat, lng);
-    } catch (googleError) {
-      logger.warn('Google geocoding failed, trying OpenWeather', {
-        error: googleError.message,
-      });
+    const roundedLat = Number(lat).toFixed(4);
+    const roundedLng = Number(lng).toFixed(4);
+    const cacheKey = `geocode:${roundedLat}:${roundedLng}`;
 
-      // Fallback to OpenWeather
-      return await reverseGeocodeWithOpenWeather(lat, lng);
+    // Try cache first
+    const cachedResult = await cacheManager.getFromCache(cacheKey);
+    if (cachedResult) {
+      logger.info('✅ Geocoding cache hit', { lat, lng, city: cachedResult.city });
+      return cachedResult;
     }
+
+    // Cache miss - call APIs
+    const result = await (async () => {
+      try {
+        return await reverseGeocodeWithGoogle(lat, lng);
+      } catch (googleError) {
+        logger.warn('Google geocoding failed, trying OpenWeather', {
+          error: googleError.message,
+        });
+        return await reverseGeocodeWithOpenWeather(lat, lng);
+      }
+    })();
+
+    if (result && result.success) {
+      // Cache coordinates for 30 days (city locations are static)
+      await cacheManager.setCache(cacheKey, result, 30 * 24 * 60 * 60);
+    }
+
+    return result;
 
   } catch (error) {
     logger.error('All geocoding services failed', {
@@ -182,10 +201,10 @@ async function reverseGeocode(lat, lng) {
     // Return coordinates as fallback
     return {
       success: false,
-      city: `Location (${lat.toFixed(2)}, ${lng.toFixed(2)})`,
+      city: `Location (${Number(lat).toFixed(2)}, ${Number(lng).toFixed(2)})`,
       state: null,
       country: null,
-      formatted: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      formatted: `Coordinates: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`,
     };
   }
 }

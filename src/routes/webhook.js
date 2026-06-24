@@ -30,14 +30,47 @@ router.post(
       // Always respond to WhatsApp immediately to prevent retries
       res.sendStatus(200);
       
-      // Handle the validated message in the background
-      await webhookController.handleMessage(req, res, sendMessage);
-    } catch (err) {
-      console.error('❌ [Webhook Route] Error in handleMessage:', err);
-      // Still send 200 to WhatsApp to prevent retries
-      if (!res.headersSent) {
-        res.sendStatus(200);
+      const value = req.body?.entry?.[0]?.changes?.[0]?.value;
+      if (!value?.messages) {
+        return;
       }
+      const msg = value.messages[0];
+      const from = msg.from;
+      
+      // Webhook deduplication using Redis cache (Phase 5)
+      const { checkAndCacheMessageId } = require("../services/deduplicationService");
+      const isDuplicate = await checkAndCacheMessageId(msg.id);
+      if (isDuplicate) {
+        console.log(`♻️ Webhook received duplicate message ${msg.id}, ignoring.`);
+        return;
+      }
+
+      // Add to BullMQ queue (Phase 4)
+      const { addMessageToQueue } = require("../queue/messageQueue");
+      const payload = {
+        messageId: msg.id,
+        phoneNumber: from,
+        type: msg.type,
+        timestamp: msg.timestamp,
+      };
+
+      if (msg.type === 'text') {
+        payload.text = msg.text?.body;
+      } else if (msg.type === 'image') {
+        payload.mediaId = msg.image?.id;
+        payload.caption = msg.image?.caption;
+      } else if (msg.type === 'audio') {
+        payload.mediaId = msg.audio?.id;
+      } else if (msg.type === 'location') {
+        payload.latitude = msg.location?.latitude;
+        payload.longitude = msg.location?.longitude;
+        payload.name = msg.location?.name;
+        payload.address = msg.location?.address;
+      }
+
+      await addMessageToQueue(from, payload.text || '', payload);
+    } catch (err) {
+      console.error('❌ [Webhook Route] Error in enqueuing message:', err);
     }
   }
 );

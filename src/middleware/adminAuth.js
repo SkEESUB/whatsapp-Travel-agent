@@ -89,14 +89,14 @@ const adminRateLimiter = async (req, res, next) => {
       return res.status(429).json({
         success: false,
         error: 'Too many requests',
-        retryAfter: Math.ceil(result.retryAfter / 1000),
+        retryAfter: result.retryAfter,
       });
     }
 
     // Add rate limit headers
     res.set('X-RateLimit-Limit', '30');
     res.set('X-RateLimit-Remaining', result.remaining);
-    res.set('X-RateLimit-Reset', new Date(Date.now() + result.retryAfter).toISOString());
+    res.set('X-RateLimit-Reset', new Date(Date.now() + result.retryAfter * 1000).toISOString());
 
     next();
 

@@ -13,8 +13,8 @@ class WebhookController {
     this.sessions = {};
   }
 
-  getSession(user) {
-    return sessionManager.getSession(user);
+  async getSession(user) {
+    return await sessionManager.getSession(user);
   }
 
   // Check if input contains numbers
@@ -63,6 +63,8 @@ class WebhookController {
 
   // Handle incoming message
   async handleMessage(req, res, sendMessageFn) {
+    let from;
+    let session;
     try {
       const value = req.body?.entry?.[0]?.changes?.[0]?.value;
       if (!value?.messages) {
@@ -71,7 +73,7 @@ class WebhookController {
       }
 
       const msg = value.messages[0];
-      const from = msg.from;
+      from = msg.from;
       const messageType = msg.type; // text, audio, location, image, etc.
 
       logger.info("📩 Incoming message", {
@@ -79,7 +81,7 @@ class WebhookController {
         type: messageType,
       });
 
-      const session = this.getSession(from);
+      session = await this.getSession(from);
 
       // Route based on message type
       switch (messageType) {
@@ -120,6 +122,10 @@ class WebhookController {
         error: err.message,
         stack: err.stack,
       });
+    } finally {
+      if (from && session) {
+        await sessionManager.saveSession(from, session);
+      }
     }
   }
 

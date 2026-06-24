@@ -13,27 +13,27 @@ async function findOrCreateUser(phoneNumber) {
   try {
     const phoneHash = hashPhoneNumber(phoneNumber);
     
-    let user = await User.findOne({ phoneHash }).lean();
+    let user = await User.findOne({ phoneHash });
     
     if (!user) {
       // Create new user
-      const newUser = await User.create({ phoneHash });
-      user = newUser.toObject();
+      const newUser = await User.create({ phoneHash, phoneNumber });
+      user = newUser;
       
       // Generate referral code
-      const userDoc = await User.findById(user._id);
-      userDoc.generateReferralCode();
-      await userDoc.save();
-      
-      user = userDoc.toObject();
+      user.generateReferralCode();
+      await user.save();
       
       logger.info('New user created', {
         phoneNumber: hashPhoneNumber(phoneNumber).substring(0, 10) + '...',
         referralCode: user.referral.code,
       });
+    } else if (!user.phoneNumber) {
+      user.phoneNumber = phoneNumber;
+      await user.save();
     }
     
-    return user;
+    return user.toObject();
   } catch (error) {
     logger.error('Failed to find or create user', {
       error: error.message,
@@ -377,6 +377,20 @@ async function getUserByPhone(phoneNumber) {
 }
 
 /**
+ * Get user by phone hash
+ */
+async function getUserByPhoneHash(phoneHash) {
+  try {
+    return await User.findOne({ phoneHash }).lean();
+  } catch (error) {
+    logger.error('Failed to get user by phone hash', {
+      error: error.message,
+    });
+    return null;
+  }
+}
+
+/**
  * Create a new user with custom data
  */
 async function createUser(phoneNumber, data = {}) {
@@ -386,6 +400,7 @@ async function createUser(phoneNumber, data = {}) {
     // Merge base data with subscription
     const userDoc = new User({
       phoneHash,
+      phoneNumber,
       ...data,
     });
     
@@ -450,6 +465,7 @@ module.exports = {
   addFavoriteDestination,
   getUser,
   getUserByPhone,
+  getUserByPhoneHash,
   createUser,
   updateUserSubscription,
   blockUser,

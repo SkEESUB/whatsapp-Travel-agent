@@ -505,7 +505,7 @@ async function getHealth(req, res) {
     // Check Redis
     try {
       const redis = require('../config/redis');
-      const redisStatus = redis.getStatus();
+      const redisStatus = redis.getConnectionStatus();
       health.redis = redisStatus;
     } catch (error) {
       health.redis = { status: 'error', message: error.message };
@@ -514,7 +514,7 @@ async function getHealth(req, res) {
     // Check MongoDB
     try {
       const database = require('../config/database');
-      const dbStatus = database.getStatus();
+      const dbStatus = database.getConnectionStatus();
       health.mongodb = dbStatus;
     } catch (error) {
       health.mongodb = { status: 'error', message: error.message };

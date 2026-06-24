@@ -17,6 +17,9 @@ const app = express();
 
 app.use(express.json());
 
+const compression = require('compression');
+app.use(compression());
+
 // =====================
 // PROCESS-LEVEL ERROR HANDLERS
 // These prevent the server from crashing on unhandled errors
@@ -153,6 +156,19 @@ const server = app.listen(PORT, async () => {
       error: err.message
     });
   }
+
+  // Initialize BullMQ Queue and Worker (Phase 4)
+  try {
+    const { initializeQueue } = require("./queue/messageQueue");
+    const { initializeWorker } = require("./queue/messageWorker");
+    
+    await initializeQueue();
+    await initializeWorker();
+    
+    logger.info("BullMQ queue and worker started successfully");
+  } catch (err) {
+    logger.error("Failed to start BullMQ queue/worker", { error: err.message });
+  }
 });
 
 // Graceful shutdown
@@ -174,21 +190,21 @@ async function gracefulShutdown(signal) {
     logger.info('HTTP server closed - no longer accepting connections');
 
     try {
-      // Step 2: Wait for current queue jobs to finish (max 10 seconds)
-      logger.info('Step 2: Waiting for queue jobs to complete...');
+      // Step 2: Stop BullMQ worker and close queue
+      logger.info('Step 2: Shutting down BullMQ worker and queue...');
       
       try {
-        const { getQueue } = require('./queue/messageQueue');
-        const queue = getQueue();
-        
-        if (queue) {
-          // Wait for active jobs to complete (with timeout)
-          await Promise.race([
-            queue.whenCurrentJobsFinished(),
-            new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout
-          ]);
-          logger.info('Queue jobs finished or timed out');
-        }
+        const { closeWorker } = require('./queue/messageWorker');
+        await closeWorker();
+        logger.info('Queue worker stopped');
+      } catch (error) {
+        logger.warn('Queue worker shutdown warning', { error: error.message });
+      }
+
+      try {
+        const { closeQueue } = require('./queue/messageQueue');
+        await closeQueue();
+        logger.info('Queue closed');
       } catch (error) {
         logger.warn('Queue shutdown warning', { error: error.message });
       }
@@ -198,7 +214,7 @@ async function gracefulShutdown(signal) {
       
       try {
         const redis = require('./config/redis');
-        await redis.disconnect();
+        await redis.shutdown();
         logger.info('Redis connection closed');
       } catch (error) {
         logger.warn('Redis shutdown warning', { error: error.message });

@@ -15,6 +15,12 @@ const userSchema = new mongoose.Schema({
     trim: true,
   },
   
+  // Raw phone number (required to send WhatsApp notifications)
+  phoneNumber: {
+    type: String,
+    trim: true,
+  },
+  
   // Display name (optional)
   displayName: {
     type: String,

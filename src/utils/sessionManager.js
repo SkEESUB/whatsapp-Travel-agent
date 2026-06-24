@@ -1,21 +1,95 @@
-// Session Manager - Centralized session state management
-// Fixes: origin reuse, transport mode persistence, session carryover bugs
+// Session Manager - Redis-based session management with graceful degradation
+// Fixes: origin reuse, transport persistence, session carryover bugs, and scalability
 
-const sessions = {};
+const { executeCommand, isRedisConnected } = require('../config/redis');
+const logger = require('../config/logger');
 
-function getSession(user) {
-  if (!sessions[user]) {
-    sessions[user] = {
+const SESSION_TTL = 24 * 60 * 60; // 24 hours in seconds
+const memoryStore = new Map(); // In-memory fallback
+
+function getSessionKey(user) {
+  return `session:${user}`;
+}
+
+/**
+ * Get or create session for user
+ */
+async function getSession(user) {
+  try {
+    const sessionKey = getSessionKey(user);
+
+    if (isRedisConnected()) {
+      const sessionData = await executeCommand('get', sessionKey);
+      
+      if (sessionData) {
+        logger.debug('Session retrieved from Redis', { user });
+        return JSON.parse(sessionData);
+      }
+    } else if (memoryStore.has(user)) {
+      logger.debug('Session retrieved from memory (fallback)', { user });
+      return memoryStore.get(user);
+    }
+
+    // Default session structure
+    const defaultSession = {
       trip: null,
       origin: null,
       awaitingOrigin: false,
       awaitingTransportMode: false,
     };
+    
+    await saveSession(user, defaultSession);
+    logger.debug('New session created', { user });
+    return defaultSession;
+
+  } catch (error) {
+    logger.error('Failed to get session', {
+      user,
+      error: error.message,
+    });
+
+    if (memoryStore.has(user)) {
+      return memoryStore.get(user);
+    }
+
+    const defaultSession = {
+      trip: null,
+      origin: null,
+      awaitingOrigin: false,
+      awaitingTransportMode: false,
+    };
+    memoryStore.set(user, defaultSession);
+    return defaultSession;
   }
-  return sessions[user];
 }
 
-// CRITICAL: Reset transport session completely
+/**
+ * Save session to Redis or memory
+ */
+async function saveSession(user, session) {
+  try {
+    const sessionKey = getSessionKey(user);
+    const sessionData = JSON.stringify(session);
+
+    if (isRedisConnected()) {
+      await executeCommand('setex', sessionKey, SESSION_TTL, sessionData);
+      logger.debug('Session saved to Redis', { user });
+    } else {
+      memoryStore.set(user, session);
+      logger.debug('Session saved to memory (fallback)', { user });
+    }
+    return true;
+  } catch (error) {
+    logger.error('Failed to save session', {
+      user,
+      error: error.message,
+    });
+    memoryStore.set(user, session);
+    return false;
+  }
+}
+
+// Reset transport session completely
 function resetTransportSession(session) {
   session.origin = null;
   session.awaitingOrigin = true;
@@ -23,7 +97,7 @@ function resetTransportSession(session) {
   console.log("🔄 Transport session reset");
 }
 
-// CRITICAL: Clear transport session after response
+// Clear transport session after response
 function clearTransportSession(session) {
   session.origin = null;
   session.awaitingOrigin = false;
@@ -62,6 +136,7 @@ function capitalize(text) {
 
 module.exports = {
   getSession,
+  saveSession,
   resetTransportSession,
   clearTransportSession,
   saveTrip,

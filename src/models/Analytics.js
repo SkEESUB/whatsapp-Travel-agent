@@ -175,11 +175,10 @@ analyticsSchema.statics.getToday = async function() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  let analytics = await this.findOne({ date: today }).lean();
+  let analytics = await this.findOne({ date: today });
   
   if (!analytics) {
     analytics = await this.create({ date: today });
-    analytics = analytics.toObject();
   }
   
   return analytics;

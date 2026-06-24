@@ -106,9 +106,12 @@ logger.stream = {
   },
 };
 
-// Helper: Create child logger with request ID
-logger.child = function (requestId) {
-  return logger.child({ requestId });
+const originalChild = logger.child;
+logger.child = function (options) {
+  if (typeof options === 'string') {
+    return originalChild.call(logger, { requestId: options });
+  }
+  return originalChild.call(logger, options);
 };
 
 // Helper: Log API calls with structured data

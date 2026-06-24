@@ -105,12 +105,49 @@ async function downloadImage(mediaId) {
 }
 
 /**
+ * Detect actual uploaded image mime type based on magic bytes (file signature)
+ */
+function detectMimeType(buffer) {
+  if (!buffer || buffer.length < 12) {
+    return 'image/jpeg';
+  }
+
+  // JPEG/JPG: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+
+  // PNG: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return 'image/png';
+  }
+
+  // WEBP: RIFF .... WEBP
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+    return 'image/webp';
+  }
+
+  // HEIC: ftypheic or ftypmsf1 etc. (bytes 4-7 = ftyp, bytes 8-11 = heic, heix, msf1 etc.)
+  const ftyp = buffer.toString('ascii', 4, 8);
+  const brand = buffer.toString('ascii', 8, 12);
+  if (ftyp === 'ftyp' && (brand.startsWith('hei') || brand.startsWith('hev') || brand.startsWith('msf'))) {
+    return 'image/heic';
+  }
+
+  return 'image/jpeg'; // Default fallback
+}
+
+/**
  * Identify place in image using Gemini Vision API
  */
 async function identifyPlace(imageBuffer) {
   try {
+    const mimeType = detectMimeType(imageBuffer);
+    
     logger.info('Identifying place with Gemini Vision', {
       bufferSize: imageBuffer.byteLength,
+      mimeType,
     });
 
     // Convert image to base64
@@ -140,7 +177,7 @@ Example responses:
       {
         inlineData: {
           data: imageBase64,
-          mimeType: 'image/jpeg',
+          mimeType,
         },
       },
     ]);

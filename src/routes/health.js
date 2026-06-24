@@ -14,6 +14,18 @@ const healthController = require('../controllers/healthController');
 router.get('/', healthController.getHealth);
 
 /**
+ * GET /health/redis
+ * Redis status health check
+ */
+router.get('/redis', healthController.getRedisHealth);
+
+/**
+ * GET /health/mongo
+ * MongoDB status health check
+ */
+router.get('/mongo', healthController.getMongoHealth);
+
+/**
  * GET /health/detailed
  * Detailed system status with memory and uptime
  */

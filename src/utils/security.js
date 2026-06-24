@@ -42,6 +42,26 @@ function sanitizeForAI(input) {
     /ignore\s+all\s+previous\s+rules/gi,
     /disregard\s+previous\s+instructions/gi,
     /forget\s+previous\s+instructions/gi,
+    /bypass\s+instructions/gi,
+    /override\s+instructions/gi,
+    /ignore\s+the\s+system/gi,
+    
+    // System prompt extraction / Leakage protection
+    /reveal\s+your\s+instructions/gi,
+    /reveal\s+your\s+prompt/gi,
+    /reveal\s+system\s+prompt/gi,
+    /output\s+your\s+system\s+prompt/gi,
+    /output\s+your\s+instructions/gi,
+    /what\s+is\s+your\s+system\s+prompt/gi,
+    /tell\s+me\s+your\s+system\s+prompt/gi,
+    /what\s+is\s+your\s+instruction/gi,
+    /tell\s+me\s+your\s+instructions/gi,
+    /tell\s+me\s+your\s+rules/gi,
+    /what\s+are\s+your\s+rules/gi,
+    /you\s+are\s+a\s+.*and\s+your\s+instructions/gi,
+    /leak\s+prompt/gi,
+    /jailbreak/gi,
+    /system\s+prompt\s+leak/gi,
     
     // Role-playing attacks
     /you\s+are\s+now\s+/gi,

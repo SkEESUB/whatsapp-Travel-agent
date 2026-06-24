@@ -57,12 +57,12 @@ function validateWebhookPayload(req, res, next) {
       return res.status(200).json({ status: 'ignored', reason: 'missing_sender' });
     }
 
-    if (!message.text || !message.text.body) {
-      logger.debug('Non-text message received (image, audio, etc.)', { 
+    if (message.type !== 'text' && message.type !== 'image' && message.type !== 'audio' && message.type !== 'location') {
+      logger.warn('Unsupported message type received', { 
         requestId,
         messageType: message.type 
       });
-      return res.status(200).json({ status: 'ignored', reason: 'non_text_message' });
+      return res.status(200).json({ status: 'ignored', reason: 'unsupported_message_type' });
     }
 
     next();
@@ -84,52 +84,59 @@ function validateAndSanitizeMessage(req, res, next) {
 
   try {
     const message = req.body.entry[0].changes[0].value.messages[0];
-    let text = message.text.body;
 
-    // Trim whitespace
-    text = text.trim();
+    // Only sanitize and validate text if it's a text message
+    if (message.type === 'text' && message.text) {
+      let text = message.text.body || '';
+      text = text.trim();
 
-    // Check empty message
-    if (text.length === 0) {
-      logger.warn('Empty message after trimming', { requestId });
-      return res.status(200).json({ status: 'ignored', reason: 'empty_message' });
-    }
+      // Check empty message
+      if (text.length === 0) {
+        logger.warn('Empty message after trimming', { requestId });
+        return res.status(200).json({ status: 'ignored', reason: 'empty_message' });
+      }
 
-    // Check minimum length
-    if (text.length < MIN_MESSAGE_LENGTH) {
-      logger.warn('Message too short', { length: text.length, requestId });
-      return res.status(200).json({ status: 'ignored', reason: 'message_too_short' });
-    }
+      // Check minimum length
+      if (text.length < MIN_MESSAGE_LENGTH) {
+        logger.warn('Message too short', { length: text.length, requestId });
+        return res.status(200).json({ status: 'ignored', reason: 'message_too_short' });
+      }
 
-    // Check maximum length (spam protection)
-    if (text.length > MAX_MESSAGE_LENGTH) {
-      logger.warn('Message exceeds maximum length', { 
-        length: text.length, 
-        max: MAX_MESSAGE_LENGTH,
-        requestId 
-      });
-      
-      // Truncate message
-      text = text.substring(0, MAX_MESSAGE_LENGTH);
+      // Check maximum length (spam protection)
+      if (text.length > MAX_MESSAGE_LENGTH) {
+        logger.warn('Message exceeds maximum length', { 
+          length: text.length, 
+          max: MAX_MESSAGE_LENGTH,
+          requestId 
+        });
+        
+        // Truncate message
+        text = text.substring(0, MAX_MESSAGE_LENGTH);
+      }
+
+      // Strip HTML tags
+      text = stripHTMLTags(text);
+
+      // Strip injection patterns
+      text = stripInjectionPatterns(text);
+
+      // Normalize Unicode
+      text = normalizeUnicode(text);
+
+      // Update message with sanitized text
       message.text.body = text;
-      
-      logger.info('Message truncated to max length', { 
-        newLength: text.length,
-        requestId 
-      });
+    } else if (message.type === 'image' && message.image) {
+      if (message.image.caption) {
+        let caption = message.image.caption.trim();
+        caption = stripHTMLTags(caption);
+        caption = stripInjectionPatterns(caption);
+        caption = normalizeUnicode(caption);
+        if (caption.length > MAX_MESSAGE_LENGTH) {
+          caption = caption.substring(0, MAX_MESSAGE_LENGTH);
+        }
+        message.image.caption = caption;
+      }
     }
-
-    // Strip HTML tags
-    text = stripHTMLTags(text);
-
-    // Strip injection patterns
-    text = stripInjectionPatterns(text);
-
-    // Normalize Unicode
-    text = normalizeUnicode(text);
-
-    // Update message with sanitized text
-    message.text.body = text;
 
     // Validate phone number
     const from = validatePhoneNumber(message.from);
@@ -144,8 +151,7 @@ function validateAndSanitizeMessage(req, res, next) {
 
     // Log sanitized message
     logger.debug('Message validated and sanitized', {
-      originalLength: req.body.entry[0].changes[0].value.messages[0].text.body?.length,
-      sanitizedLength: text.length,
+      type: message.type,
       from: from,
       requestId,
     });

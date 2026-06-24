@@ -56,22 +56,34 @@ async function getWeather(cityName) {
       cacheKey,
       cacheManager.TTL_CONFIG.WEATHER,
       async () => {
-        // Step 1: Geocode city name to get coordinates
-        const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`;
+        // Step 1: Geocode city name to get coordinates (with caching)
+        const geocodeCacheKey = `geocode_city:${cityName.toLowerCase().trim()}`;
+        let latitude, longitude;
         
-        const geocodeResponse = await axios.get(geocodeUrl);
-        
-        if (!geocodeResponse.data?.results?.[0]) {
-          logger.warn(`⚠️ City not found: ${cityName}`);
-          return {
-            success: false,
-            message: `⚠️ Location not found: ${cityName}`,
-          };
-        }
+        const cachedCoords = await cacheManager.getFromCache(geocodeCacheKey);
+        if (cachedCoords) {
+          latitude = cachedCoords.latitude;
+          longitude = cachedCoords.longitude;
+          logger.info('Geocoding coordinates cache hit', { cityName, latitude, longitude });
+        } else {
+          const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`;
+          const geocodeResponse = await axios.get(geocodeUrl);
+          
+          if (!geocodeResponse.data?.results?.[0]) {
+            logger.warn(`⚠️ City not found: ${cityName}`);
+            return {
+              success: false,
+              message: `⚠️ Location not found: ${cityName}`,
+            };
+          }
 
-        const location = geocodeResponse.data.results[0];
-        const latitude = location.latitude;
-        const longitude = location.longitude;
+          const location = geocodeResponse.data.results[0];
+          latitude = location.latitude;
+          longitude = location.longitude;
+          
+          // Cache coordinates for 30 days (city location is static)
+          await cacheManager.setCache(geocodeCacheKey, { latitude, longitude }, 30 * 24 * 60 * 60);
+        }
 
         // Step 2: Fetch weather data using coordinates
         const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
